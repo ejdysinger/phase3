@@ -7,9 +7,13 @@
 
 #define MAXSEMS         200
 
+#define INACTIVE		0
+#define ACTIVE			1
+
 typedef struct semaphore{
 	int maxValue;
 	int current;
+	int status;
 	mailLine * waitList;
 } semaphore;
 

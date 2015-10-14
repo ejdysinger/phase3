@@ -8,6 +8,11 @@
 
 
 /* -------------------------- Globals ------------------------------------- */
+struct Procstruct ProcTableThree[MAXPROC];
+
+struct mailSlot MailLine[MAXPROC];
+struct semaphore SemTable[MAXSEMS];
+
 
 /* ------------------------------------------------------------------------ */
 
@@ -17,14 +22,20 @@ start2(char *arg)
 {
     int pid;
     int status;
-    /*
-     * Check kernel mode here.
-     */
-
-    /*
-     * Data structure initialization as needed...
-     */
-
+    /* Check kernel mode here. */
+    if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
+            USLOSS_Halt(1);
+    /* Data structure initialization as needed... */
+    /* the process table */
+    int iter = 0;
+    for(;iter < MAXPROC; iter++){
+    	MailLine[iter].mboxID = -1;
+    	MailLine[iter].status = INACTIVE;
+    }
+    /* the semaphore table */
+    for(iter = 0; iter < MAXSEMS;iter++){
+    	SemTable[iter].status = INACTIVE;
+    }
 
     /*
      * Create first user-level process and wait for it to finish.
