@@ -14,6 +14,7 @@ struct mailSlot MailLine[MAXPROC];
 struct semaphore SemTable[MAXSEMS];
 
 
+int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
 
 
@@ -74,6 +75,90 @@ start2(char *arg)
     pid = waitReal(&status);
 
 } /* start2 */
+
+
+void spawn(systemArgs *args){
+    if(args->number != SYS_SPAWN){
+        if (debugFlag){
+            USLOSS_Console("spawn(): Attempted to spawn process with wrong sys call number: %d.\n", args->number);
+        }
+        args->arg4 = (void *)-1;
+        args->arg1 = (void *)-1;
+        return;
+    }
+    // Priority out of bounds
+    if(args->arg4>6 || args->arg4<1){
+        if (debugFlag){
+            USLOSS_Console("spawn(): Attempted to spawn process with priority out of bounds.\n");
+        }
+        args->arg4 = (void *)-1;
+        args->arg1 = (void *)-1;
+        return;
+    }
+    
+    if(args->arg3 < USLOSS_MIN_STACK){
+        if (debugFlag){
+            USLOSS_Console("spawn(): Attempted to spawn process stack size too small.\n");
+        }
+        args->arg4 = (void *)-1;
+        args->arg1 = (void *)-1;
+        return;
+    }
+    int result;
+    result = spawnReal(args->arg5, args->arg1, args->arg2, args->arg3,args->arg4);
+    
+    args->arg1 = (void *)result;
+    args->arg4 = (void *)0;
+    
+}
+int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
+    int pid;
+    pid = fork1(name, func, arg, stacksize, priority);
+    if(pid<0)
+        return -1;
+    else
+        return pid;
+}/* spawnReal */
+
+void wait(systemArgs *args){
+    if(args->number != SYS_WAIT){
+        if (debugFlag){
+            USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
+        }
+        return;
+    }
+    int pid;
+    int status;
+    pid = waitReal(&status);
+    args->arg1 = (void *)pid;
+    args->arg2 = status;
+    args->arg4 = pid==-1 ? pid : 0;
+}
+
+int waitReal(int * status){
+    int pid;
+    pid = join(status);
+    if(pid == -2){
+        pid = -1;
+    }
+    return pid;
+}
+
+void terminate(systemArgs *args){
+    if(args->number != SYS_TERMINATE){
+        if (debugFlag){
+            USLOSS_Console("terminate(): Attempted to terminate a process with wrong sys call number: %d.\n", args->number);
+        }
+        return;
+    }
+    terminateReal();
+}
+
+void terminateReal(){
+    
+}
+
+
 
 /* handlers include :
  *
