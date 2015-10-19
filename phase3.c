@@ -1,13 +1,17 @@
 #include <usloss.h>
 #include <phase1.h>
 #include <phase2.h>
-#include "phase3.h""
+#include "phase3.h"
 #include <usyscall.h>
 #include "sems.h"
 
 /* -------------------------- Prototypes ------------------------------------- */
+void semV(systemArgs *args);
+void semFree(systemArgs *args);
+void getTimeOfDay(systemArgs *args);
+void cpuTime(systemArgs *args);
+void getPID(systemArgs *args);
 void nullSys3(systemArgs *args);
-
 /* -------------------------- Globals ------------------------------------- */
 struct Procstruct ProcTableThree[MAXPROC];
 
@@ -28,7 +32,6 @@ start2(char *arg)
     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
             USLOSS_Halt(1);
     /* Data structure initialization as needed... */
-    /* the process table */
     int iter = 0;
     /* the semaphore table */
     for(iter = 0; iter < MAXSEMS;iter++)
@@ -209,10 +212,25 @@ int semVHelper(int * semNum)
 	/* increment if possible */
 	if(target->current < target->maxValue)
 		target->current++;
-	/* block on the semaphore if not */
+	/* block on the semaphore and add to semaphore waitlist if not */
 	else
-		MboxSend(target->waitList.mboxID, NULL, NULL);
+		semBlockMe(target, getPID);
+	MboxSend(target->seMbox, NULL, NULL);
 	return 0;
+}
+
+/* adds a process to the list of processes blocked on a particular sempahore */
+void semBlockMe(struct semaphore * target, int PID)
+{
+	struct semWaiter * temp = target->waitList;
+	if(temp->PID == INACTIVE)
+		target->waitList.PID = PID;
+	else if(temp->next.PID == INACTIVE)
+		temp->next.PID = PID;
+	else
+	{
+		for(;temp->next->PID != INACTIVE)
+	}
 }
 
 /* ------------------------------------------------------------------------
