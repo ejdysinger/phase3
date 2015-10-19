@@ -15,7 +15,8 @@ void nullSys3(systemArgs *args);
 void spawn(systemArgs *args);
 void wait(systemArgs *args);
 void terminate(systemArgs *args);
-
+void semAddMe(struct semaphore * target, int PID);
+int semRemoveMe(struct semaphore * target);
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
 
@@ -262,8 +263,8 @@ int semVHelper(int * semNum)
 	if(target->status == INACTIVE)
 		return -1;
 	/* increment if possible */
-	if(target->current < target->maxValue)
-		target->current++;
+	if(target->value < target->maxValue)
+		target->value++;
 	/* block on the semaphore and add to semaphore waitlist if not */
 	else
 		semBlockMe(target, getPID);
@@ -272,17 +273,41 @@ int semVHelper(int * semNum)
 }
 
 /* adds a process to the list of processes blocked on a particular sempahore */
-void semBlockMe(struct semaphore * target, int PID)
+void semAddMe(struct semaphore * target, int PID)
 {
-	struct semWaiter * temp = target->waitList;
-	if(temp->PID == INACTIVE)
-		target->waitList.PID = PID;
-	else if(temp->next.PID == INACTIVE)
-		temp->next.PID = PID;
-	else
-	{
-		for(;temp->next->PID != INACTIVE)
+	// if head and tail are both -1, the list is empty
+	if(target->head == -1 && target->tail == -1){
+		target->head = 0;
+		target->waitList[target->head] = PID;
 	}
+	// if tail is -1 and head is not, the list has 1 element
+	else if(target->head != -1 && target->tail == -1){
+		target->tail = target->head + 1;
+		target->waitList[target->tail] = PID;
+	}else{
+		target->tail = (target->tail + 1) % MAXPROC;
+		target->waitList[target->tail] = PID;
+	}
+}
+
+/* removes the process from the list of processes blocked on a particular
+ * semaphore and returns its PID or returns -1 */
+int semRemoveMe(struct semaphore * target)
+{
+	int reply;
+	//if head and tail are both -1, the list is empty
+	if(target->head == -1 && target->tail == -1){
+		return -1;
+	}
+	reply = target->waitList[target->head];
+	target->waitList[target->head] = 0;
+	// if tail is -1 and head is not, the list has 1 element
+	if(target->head != -1 && target->tail == -1)
+		target->head = -1;
+	else
+		target->head = (target->head +1) % MAXPROC;
+
+	return reply;
 }
 
 /* ------------------------------------------------------------------------
@@ -314,12 +339,15 @@ int semFreeHelper(int * semNum)
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
-	if(target->waitList.waitList != NULL){
+	/* if there are processes waiting on the mailbox
+	if(target->head != -1){
 		reply = 1;
-		for(;)
-		terminateReal(target->waitList.waitList->PID);
-	}
-	else
+		int iter;
+		for(iter = target->head; target->waitList[iter] != 0; iter = (iter + 1)%MAXPROC){
+			terminateReal(target->waitList[iter]);
+			target->waitList[iter] = 0;
+		}
+	}else
 		reply = 0;
 }
 
@@ -345,7 +373,7 @@ void getTimeOfDay(systemArgs *args)
    ----------------------------------------------------------------------- */
 void cpuTime(systemArgs *args)
 {
-
+	args->arg1 = getPID();
 }
 
 /* ------------------------------------------------------------------------
@@ -357,7 +385,7 @@ void cpuTime(systemArgs *args)
    ----------------------------------------------------------------------- */
 void getPID(systemArgs *args)
 {
-
+	args->arg1 = getPID();
 }
 
 /* ------------------------------------------------------------------------
