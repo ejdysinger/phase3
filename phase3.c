@@ -5,14 +5,14 @@
 #include <usyscall.h>
 
 /* -------------------------- Prototypes ------------------------------------- */
-
+void nullSys3(systemArgs *args);
 
 /* -------------------------- Globals ------------------------------------- */
 struct Procstruct ProcTableThree[MAXPROC];
 
-struct mailSlot MailLine[MAXPROC];
 struct semaphore SemTable[MAXSEMS];
 
+void (*sys_vec[MAXSYSCALLS])(systemArgs *args);
 
 int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
@@ -29,14 +29,28 @@ start2(char *arg)
     /* Data structure initialization as needed... */
     /* the process table */
     int iter = 0;
-    for(;iter < MAXPROC; iter++){
-    	MailLine[iter].mboxID = -1;
-    	MailLine[iter].status = INACTIVE;
-    }
     /* the semaphore table */
-    for(iter = 0; iter < MAXSEMS;iter++){
+    for(iter = 0; iter < MAXSEMS;iter++)
+    {
     	SemTable[iter].status = INACTIVE;
     }
+    /* set all of sys_vec to nullsys3 */
+    for(iter = 0;iter < MAXSYSCALLS; iter++)
+    {
+    	sys_vec[iter] = nullSys3;
+    }
+
+    /* place appropriate system call handlers in appropriate slots */
+    sys_vec[SYS_SPAWN] = spawn;
+    sys_vec[SYS_WAIT] = wait;
+    sys_vec[SYS_TERMINATE] = terminate;
+    sys_vec[SYS_SEMCREATE] = semCreate;
+    sys_vec[SYS_SEMP];
+    sys_vec[SYS_SEMV] = semV;
+    sys_vec[SYS_SEMFREE] = semFree;
+    sys_vec[SYS_GETTIMEOFDAY] = getTimeOfDay;
+    sys_vec[SYS_CPUTIME] = cpuTime;
+    sys_vec[SYS_GETPID] = getPID;
 
     /*
      * Create first user-level process and wait for it to finish.
@@ -66,7 +80,7 @@ start2(char *arg)
      * values back into the sysargs pointer, switch to user-mode, and 
      * return to the user code that called Spawn.
      */
-    pid = spawnReal("start3", start3, NULL, USLOSS_MIN_STACK, 3);
+    pid = spawnReal("start3", start3, NULL, 4*USLOSS_MIN_STACK, 3);
 
     /* Call the waitReal version of your wait code here.
      * You call waitReal (rather than Wait) because start2 is running
@@ -160,6 +174,92 @@ void terminateReal(){
 
 
 
-/* handlers include :
- *
- */
+
+/* handlers include : */
+/* ------------------------------------------------------------------------
+   Name - SemV
+   Purpose - performs a "V" operation on a semaphore
+   Parameters - a struct of arguments
+   Returns - -1 if semaphore handle is invalid, 0 otherwise
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void semV(systemArgs *args)
+{
+	/* retrieves the semaphore location from the args struct */
+
+	/* if the semaphore handle is invalid return -1 */
+
+	/* increments the semaphore */
+	return 0;
+
+}
+/* ------------------------------------------------------------------------
+   Name - SemFree
+   Purpose - frees a semaphore; terminates any processes waiting on the
+   	   	   	   semaphore
+   Parameters - a struct of arguments
+   Returns - -1 if sem handle invalid, 1 if processes were blocked on the
+   	   	   	   sem, 0 otherwise
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void semFree(systemArgs *args)
+{
+	/* retrieve the semaphore handle */
+
+	/* if handle invalid, return -1 */
+
+	/* remove the semaphore */
+
+	/* if there are any waiting processes on the sem, terminate each and return 1 */
+
+}
+/* ------------------------------------------------------------------------
+   Name - GetTimeOfDay
+   Purpose - returns the value of the USLOSS time-of-day clock
+   Parameters - a struct of arguments
+   Returns - nothing
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void getTimeOfDay(systemArgs *args)
+{
+	/* place time of day in args*[4] */
+
+}
+
+/* ------------------------------------------------------------------------
+   Name - CPUTime
+   Purpose - returns the cpu time of the current process
+   Parameters - a struct of arguments
+   Returns - nothing
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void cpuTime(systemArgs *args)
+{
+
+}
+
+/* ------------------------------------------------------------------------
+   Name - getPID
+   Purpose - returns the PID of the current process
+   Parameters - a struct of arguments
+   Returns - nothing
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void getPID(systemArgs *args)
+{
+
+}
+
+/* ------------------------------------------------------------------------
+   Name - nullSys3
+   Purpose - handles calls to uninstantiated system calls by terminating
+   	   	     calling process
+   Parameters - a struct of arguments
+   Returns - nothing
+   Side Effects - terminates the offending process
+   ----------------------------------------------------------------------- */
+void nullSys3(systemArgs *args)
+{
+	USLOSS_Console("Invalid System call; Terminating process/n");
+
+}
