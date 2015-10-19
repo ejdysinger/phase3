@@ -1,8 +1,9 @@
 #include <usloss.h>
 #include <phase1.h>
 #include <phase2.h>
-#include <phase3.h>
+#include "phase3.h""
 #include <usyscall.h>
+#include "sems.h"
 
 /* -------------------------- Prototypes ------------------------------------- */
 void nullSys3(systemArgs *args);
@@ -12,7 +13,7 @@ struct Procstruct ProcTableThree[MAXPROC];
 
 struct semaphore SemTable[MAXSEMS];
 
-void (*sys_vec[MAXSYSCALLS])(systemArgs *args);
+void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
 int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
@@ -37,20 +38,20 @@ start2(char *arg)
     /* set all of sys_vec to nullsys3 */
     for(iter = 0;iter < MAXSYSCALLS; iter++)
     {
-    	sys_vec[iter] = nullSys3;
+    	systemCallVec[iter] = nullSys3;
     }
 
     /* place appropriate system call handlers in appropriate slots */
-    sys_vec[SYS_SPAWN] = spawn;
-    sys_vec[SYS_WAIT] = wait;
-    sys_vec[SYS_TERMINATE] = terminate;
-    sys_vec[SYS_SEMCREATE] = semCreate;
-    sys_vec[SYS_SEMP];
-    sys_vec[SYS_SEMV] = semV;
-    sys_vec[SYS_SEMFREE] = semFree;
-    sys_vec[SYS_GETTIMEOFDAY] = getTimeOfDay;
-    sys_vec[SYS_CPUTIME] = cpuTime;
-    sys_vec[SYS_GETPID] = getPID;
+    systemCallVec[SYS_SPAWN] = spawn;
+    systemCallVec[SYS_WAIT] = wait;
+    systemCallVec[SYS_TERMINATE] = terminate;
+    systemCallVec[SYS_SEMCREATE] = semCreate;
+    systemCallVec[SYS_SEMP];
+    systemCallVec[SYS_SEMV] = semV;;
+    systemCallVec[SYS_SEMFREE] = semFree;
+    systemCallVec[SYS_GETTIMEOFDAY] = getTimeOfDay;
+    systemCallVec[SYS_CPUTIME] = cpuTime;
+    systemCallVec[SYS_GETPID] = getPID;
 
     /*
      * Create first user-level process and wait for it to finish.
@@ -185,14 +186,35 @@ void terminateReal(){
    ----------------------------------------------------------------------- */
 void semV(systemArgs *args)
 {
+	if(args->number != SYS_SEMV)
+	{
+		if (debugFlag)
+			USLOSS_Console("semV(): Attempted a \"V\" operation on a semaphore with wrong sys call number: %d.\n", args->number);
+		return;
+	}
 	/* retrieves the semaphore location from the args struct */
-
+	int semNum;
+	semNum = semVHelper((int *)args->arg1);
 	/* if the semaphore handle is invalid return -1 */
-
-	/* increments the semaphore */
-	return 0;
-
+	args->arg4 =  semNum == -1 ? -1 : 0;
 }
+
+/* helper function for semV */
+int semVHelper(int * semNum)
+{
+	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+	/* check if valid semaphore */
+	if(target->status == INACTIVE)
+		return -1;
+	/* increment if possible */
+	if(target->current < target->maxValue)
+		target->current++;
+	/* block on the semaphore if not */
+	else
+		MboxSend(target->waitList.mboxID, NULL, NULL);
+	return 0;
+}
+
 /* ------------------------------------------------------------------------
    Name - SemFree
    Purpose - frees a semaphore; terminates any processes waiting on the
@@ -204,15 +226,33 @@ void semV(systemArgs *args)
    ----------------------------------------------------------------------- */
 void semFree(systemArgs *args)
 {
-	/* retrieve the semaphore handle */
-
-	/* if handle invalid, return -1 */
-
-	/* remove the semaphore */
-
-	/* if there are any waiting processes on the sem, terminate each and return 1 */
-
+	if(args->number != SYS_SEMFREE)
+	{
+		if (debugFlag)
+			USLOSS_Console("semFree(): Attempted a \"Free\" operation on a semaphore with wrong sys call number: %d.\n", args->number);
+		return;
+	}
+	int semNum = semFreeHelper((int *)args->arg1);
+	/* place return value into arg4 */
+	args->arg4 = semNum;
 }
+
+int semFreeHelper(int * semNum)
+{
+	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+	int reply;
+	/* check if valid semaphore */
+	if(target->status == INACTIVE)
+		return -1;
+	if(target->waitList.waitList != NULL){
+		reply = 1;
+		for(;)
+		terminateReal(target->waitList.waitList->PID);
+	}
+	else
+		reply = 0;
+}
+
 /* ------------------------------------------------------------------------
    Name - GetTimeOfDay
    Purpose - returns the value of the USLOSS time-of-day clock
@@ -260,6 +300,5 @@ void getPID(systemArgs *args)
    ----------------------------------------------------------------------- */
 void nullSys3(systemArgs *args)
 {
-	USLOSS_Console("Invalid System call; Terminating process/n");
-
+	USLOSS_Console("nullSys3(): Invalid System call: %d;\n Terminating process/n", args->number);
 }

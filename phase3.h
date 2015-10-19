@@ -14,7 +14,7 @@ typedef struct semaphore{
 	int maxValue;
 	int current;
 	int status;
-	mailLine * waitList;
+	mailbox waitList;
 } semaphore;
 
 typedef struct mailLine
