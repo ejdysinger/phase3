@@ -1,19 +1,13 @@
 
 #define MAX_SEMS 200
 
-
-
 typedef struct semaphore
 {
 	int maxValue;
-	int current;
+	int value;
 	int status;
-	semWaiter waitList[MAXPROC];
-	int seMbox;
+	int waitList[MAXPROC];
+	int head;
+	int tail;
+	int seMbox; // position in table of the mbox
 } semaphore;
-
-typedef struct semWaiter
-{
-	int PID;
-	semWaiter next;
-}semWaiter;
