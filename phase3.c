@@ -1,15 +1,18 @@
 #include <usloss.h>
 #include <phase1.h>
 #include <phase2.h>
-#include "phase3.h""
+#include "phase3.h"
 #include <usyscall.h>
 #include "sems.h"
 
 /* -------------------------- Prototypes ------------------------------------- */
 void nullSys3(systemArgs *args);
+void spawn(systemArgs *args);
+void wait(systemArgs *args);
+void terminate(systemArgs *args);
 
 /* -------------------------- Globals ------------------------------------- */
-struct Procstruct ProcTableThree[MAXPROC];
+struct ProcStruct ProcTableThree[MAXPROC];
 
 struct semaphore SemTable[MAXSEMS];
 
@@ -39,6 +42,10 @@ start2(char *arg)
     for(iter = 0;iter < MAXSYSCALLS; iter++)
     {
     	systemCallVec[iter] = nullSys3;
+    }
+    
+    for(iter = 0; iter < MAXPROC ; iter++){
+        ProcTableThree[iter].status = INACTIVE;
     }
 
     /* place appropriate system call handlers in appropriate slots */
@@ -127,31 +134,45 @@ void spawn(systemArgs *args){
     
 }
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
-    int pid;
-    pid = fork1(name, func, arg, stacksize, priority);
-    if(pid<0)
+    int kidpid;
+    kidpid = fork1(name, func, arg, stacksize, priority);
+    if(kidpid<0)
         return -1;
-    else
-        return pid;
+    else{
+        int i;
+        int parentpid = getpid();
+        for(i=0;i<MAXPROC;i++){
+            if(ProcTableThree[parentpid%MAXPROC].children[i] == INACTIVE){
+                ProcTableThree[parentpid%MAXPROC].children[i] = kidpid;
+            }
+        }
+        strcpy(ProcTableThree[kidpid%MAXPROC].name, name);
+        ProcTableThree[kidpid%MAXPROC].pid = kidpid;
+        ProcTableThree[kidpid%MAXPROC].status = ACTIVE;
+        memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
+        return kidpid;
+    }
+    
 }/* spawnReal */
 
-void wait(systemArgs *args){
-    if(args->number != SYS_WAIT){
-        if (debugFlag){
-            USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
-        }
-        return;
-    }
-    int pid;
-    int status;
-    pid = waitReal(&status);
-    args->arg1 = (void *)pid;
-    args->arg2 = status;
-    args->arg4 = pid==-1 ? pid : 0;
-}
+//void wait(systemArgs *args){
+//    if(args->number != SYS_WAIT){
+//        if (debugFlag){
+//            USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
+//        }
+//        return;
+//    }
+//    int pid;
+//    int status;
+//    pid = waitReal(&status);
+//    args->arg1 = (void *)pid;
+//    args->arg2 = status;
+//    args->arg4 = pid==-1 ? pid : 0;
+//}
 
 int waitReal(int * status){
     int pid;
+    ProcTableThree[getpid()%MAXPROC].status = WAIT_BLOCKED;
     pid = join(status);
     if(pid == -2){
         pid = -1;
@@ -166,11 +187,43 @@ void terminate(systemArgs *args){
         }
         return;
     }
-    terminateReal();
+    int currentpid = getpid();
+    terminateReal(currentpid);
 }
 
-void terminateReal(){
+void terminateReal(int pid){
+    int i;
+    for(i=0;i<MAXPROC;i++){
+        if(ProcTableThree[pid%MAXPROC].children[i] == INACTIVE){
+            break;
+        }
+        else{
+            terminateReal(ProcTableThree[pid%MAXPROC].children[i]);
+            ProcTableThree[pid%MAXPROC].children[i] = INACTIVE;
+        }
+    }
+    zap(pid);
+    /* Remove process from ProcessTable after it quits */
+    ProcTableThree[pid%MAXPROC].status = INACTIVE;
     
+    
+    /* If the process last zapped was Start3 then halt b/c all user processes are done. */
+    if(strcmp(ProcTableThree[pid%MAXPROC].name, "start3")==0){
+        if(debugFlag){
+            USLOSS_Console("terminateReal(): Start 3 terminated, halting...\n");
+        }
+        USLoss_halt(0);
+    }
+    
+}
+
+void semCreate(systemArgs *args){
+    if(args->number != SYS_SEMCREATE){
+        if (debugFlag){
+            USLOSS_Console("semCreate(): Attempted to semCreate wrong sys call number: %d.\n", args->number);
+        }
+        return;
+    }
 }
 
 
