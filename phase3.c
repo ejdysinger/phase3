@@ -17,10 +17,14 @@ void wait(systemArgs *args);
 void terminate(systemArgs *args);
 void semAddMe(struct semaphore * target, int PID);
 int semRemoveMe(struct semaphore * target);
+void semCreate(systemArgs *args);
+void semP(systemArgs *args);
+
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
 
 struct semaphore SemTable[MAXSEMS];
+int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
@@ -35,6 +39,7 @@ int start2(char *arg){
     if(!(USLOSS_PSR_CURRENT_MODE & USLOSS_PsrGet()))
             USLOSS_Halt(1);
     /* Data structure initialization as needed... */
+    semsUsed = 0;
     int iter = 0;
     /* the semaphore table */
     for(iter = 0; iter < MAXSEMS;iter++)
@@ -158,20 +163,20 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     
 }/* spawnReal */
 
-//void wait(systemArgs *args){
-//    if(args->number != SYS_WAIT){
-//        if (debugFlag){
-//            USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
-//        }
-//        return;
-//    }
-//    int pid;
-//    int status;
-//    pid = waitReal(&status);
-//    args->arg1 = (void *)pid;
-//    args->arg2 = status;
-//    args->arg4 = pid==-1 ? pid : 0;
-//}
+void wait(systemArgs *args){
+    if(args->number != SYS_WAIT){
+        if (debugFlag){
+            USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
+        }
+        return;
+    }
+    int pid;
+    int status;
+    pid = waitReal(&status);
+    args->arg1 = (void *)pid;
+    args->arg2 = status;
+    args->arg4 = pid==-1 ? pid : 0;
+}
 
 int waitReal(int * status){
     int pid;
@@ -227,6 +232,79 @@ void semCreate(systemArgs *args){
         }
         return;
     }
+    
+    if(semsUsed>MAXSEMS || args->arg1 < 0){
+        args->arg4 = -1;
+        return;
+    }
+    int index;
+    index = semCreateReal(args->arg1);
+    args->arg1 = index;
+    args->arg4 = 0;
+    
+}
+
+int semCreateReal(int value){
+    struct semaphore newSem;
+    int mboxId = MboxCreate(0, 50);
+    newSem.seMbox = mboxId;
+    newSem.status=ACTIVE;
+    newSem.head = -1;
+    newSem.tail = -1;
+    newSem.value = value;
+    int i;
+    for(i=0;i<MAXSEMS;i++){
+        if(SemTable[i].status == INACTIVE){
+            SemTable[i] = newSem;
+            break;
+        }
+    }
+    semsUsed++;
+    return i;
+}
+
+void semP(systemArgs *args){
+    if(args->number != SYS_SEMP){
+        if (debugFlag){
+            USLOSS_Console("semP(): Attempted to semP with wrong sys call number: %d.\n", args->number);
+        }
+        return;
+    }
+    int index;
+    index = args->arg1;
+    if(index > MAXSEMS-1 || SemTable[index].status == INACTIVE){
+        if(debugFlag){
+            USLOSS_Console("semP(): Semaphore inactive or index out of bounds at index: %d.\n", index);
+        }
+        args->arg4 = -1;
+        return;
+    }
+    semPReal(index);
+    args->arg4=0;
+}
+
+void semPReal(int index){
+    int mboxId = SemTable[index%MAXSEMS].seMbox;
+    char * msg;
+    // List is empty
+    if(SemTable[index%MAXSEMS].head == -1){
+        SemTable[index%MAXSEMS].waitList[0] = getpid();
+        SemTable[index%MAXSEMS].head = 0;
+        SemTable[index%MAXSEMS].tail = 0;
+    }
+    // List is full
+    else if(SemTable[index%MAXSEMS].head == (SemTable[index%MAXSEMS].tail+1)%MAXPROC){
+        if(debugFlag){
+            USLOSS_Console("semPReal(): index: %d in SemTable has a full wait list.\n", index%MAXSEMS);
+        }
+    }
+    else{
+        SemTable[index%MAXSEMS].tail = (SemTable[index%MAXSEMS].tail+1)%MAXPROC;
+        SemTable[index%MAXSEMS].waitList[SemTable[index%MAXSEMS].tail] = getpid();
+    }
+
+    MboxReceive(mboxId, msg, 50);
+    SemTable[index].value--;
 }
 
 
@@ -339,7 +417,7 @@ int semFreeHelper(int * semNum)
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
-	/* if there are processes waiting on the mailbox
+	/* if there are processes waiting on the mailbox */
 	if(target->head != -1){
 		reply = 1;
 		int iter;
