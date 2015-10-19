@@ -11,33 +11,12 @@
 #define ACTIVE			1
 #define WAIT_BLOCKED    2
 
-typedef struct semaphore{
-	int maxValue;
-	int current;
-	int status;
-	mailbox waitList;
-} semaphore;
-
-typedef struct mailLine
-{
-    int PID;
-    // a pointer to the location in memory where the sent message is stored
-    char msg[MAX_MESSAGE];
-    // the max message size that can be held
-    int msgSize;
-    // the status of the mailLine object
-    int status;
-    // a pointer to the next mailLine object
-    struct mailLine * next;
-}mailLine;
-
 #define TRUE 1
 #define FALSE 0
 
 
 #define MAXHANDLERS 1
 
-#define INACTIVE -1
 
 struct ProcStruct {
     int pid;
@@ -89,6 +68,5 @@ struct mailSlot {
     char message [MAX_MESSAGE];
     slotPtr nextSlot;
 };
-
 #endif /* _PHASE3_H */
 
