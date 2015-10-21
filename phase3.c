@@ -122,6 +122,7 @@ int start2(char *arg){
     return pid;
 
 } /* start2 */
+/* USLOSS_PsrSet(USLOSS_PsrGet() & ~USLOSS_PSR_CURRENT_MODE) */
 
 /* handlers include : */
 void spawn(systemArgs *args){
