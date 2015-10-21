@@ -4,6 +4,7 @@
 #include "phase3.h"
 #include <usyscall.h>
 #include "sems.h"
+#include <String.h>
 
 /* -------------------------- Prototypes ------------------------------------- */
 void semV(systemArgs *args);
@@ -19,6 +20,11 @@ void semAddMe(struct semaphore * target, int PID);
 int semRemoveMe(struct semaphore * target);
 void semCreate(systemArgs *args);
 void semP(systemArgs *args);
+void terminateReal(int currentpid);
+int semCreateReal(int value);
+int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority);
+int waitReal(int * status);
+void semPReal(int index);
 
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
@@ -61,7 +67,7 @@ int start2(char *arg){
     systemCallVec[SYS_WAIT] = wait;
     systemCallVec[SYS_TERMINATE] = terminate;
     systemCallVec[SYS_SEMCREATE] = semCreate;
-    systemCallVec[SYS_SEMP];
+    systemCallVec[SYS_SEMP] = semP;
     systemCallVec[SYS_SEMV] = semV;;
     systemCallVec[SYS_SEMFREE] = semFree;
     systemCallVec[SYS_GETTIMEOFDAY] = getTimeOfDay;
@@ -119,7 +125,7 @@ void spawn(systemArgs *args){
         return;
     }
     // Priority out of bounds
-    if(args->arg4>6 || args->arg4<1){
+    if((int)args->arg4>6 || (int)args->arg4<1){
         if (debugFlag){
             USLOSS_Console("spawn(): Attempted to spawn process with priority out of bounds.\n");
         }
@@ -128,7 +134,7 @@ void spawn(systemArgs *args){
         return;
     }
     
-    if(args->arg3 < USLOSS_MIN_STACK){
+    if((int)args->arg3 < USLOSS_MIN_STACK){
         if (debugFlag){
             USLOSS_Console("spawn(): Attempted to spawn process stack size too small.\n");
         }
@@ -137,9 +143,9 @@ void spawn(systemArgs *args){
         return;
     }
     int result;
-    result = spawnReal(args->arg5, args->arg1, args->arg2, args->arg3,args->arg4);
+    result = spawnReal(args->arg5, args->arg1, args->arg2, (int)args->arg3,(int)args->arg4);
     
-    args->arg1 = (void *)result;
+    args->arg1 = &result;
     args->arg4 = (void *)0;
     
 }
@@ -175,9 +181,9 @@ void wait(systemArgs *args){
     int pid;
     int status;
     pid = waitReal(&status);
-    args->arg1 = (void *)pid;
-    args->arg2 = status;
-    args->arg4 = pid==-1 ? pid : 0;
+    args->arg1 = &pid;
+    args->arg2 = &status;
+    args->arg4 = pid==-1 ? &pid : 0;
 }
 
 int waitReal(int * status){
@@ -222,7 +228,7 @@ void terminateReal(int pid){
         if(debugFlag){
             USLOSS_Console("terminateReal(): Start 3 terminated, halting...\n");
         }
-        USLoss_halt(0);
+        USLOSS_Halt(0);
     }
     
 }
@@ -236,12 +242,12 @@ void semCreate(systemArgs *args){
     }
     
     if(semsUsed>MAXSEMS || args->arg1 < 0){
-        args->arg4 = -1;
+        args->arg4 = (void *)-1;
         return;
     }
     int index;
-    index = semCreateReal(args->arg1);
-    args->arg1 = index;
+    index = semCreateReal((int)args->arg1);
+    args->arg1 = &index;
     args->arg4 = 0;
     
 }
@@ -273,12 +279,12 @@ void semP(systemArgs *args){
         return;
     }
     int index;
-    index = args->arg1;
+    index = (int)args->arg1;
     if(index > MAXSEMS-1 || SemTable[index].status == INACTIVE){
         if(debugFlag){
             USLOSS_Console("semP(): Semaphore inactive or index out of bounds at index: %d.\n", index);
         }
-        args->arg4 = -1;
+        args->arg4 = (void *)-1;
         return;
     }
     semPReal(index);
@@ -338,7 +344,7 @@ void semV(systemArgs *args)
 /* helper function for semV */
 int semVHelper(int * semNum)
 {
-	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
@@ -346,8 +352,8 @@ int semVHelper(int * semNum)
 	if(target->value < target->maxValue)
 		target->value++;
 	/* block on the semaphore and add to semaphore waitlist if not */
-	else{
-		semAddMe(target, getPID);
+	else
+		semAddMe(target, getpid());
 	MboxSend(target->seMboxID, NULL, NULL);
 	return 0;
 }
@@ -414,7 +420,7 @@ void semFree(systemArgs *args)
 
 int semFreeHelper(int * semNum)
 {
-	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
 	int reply;
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
@@ -473,7 +479,7 @@ void cpuTime(systemArgs *args)
    ----------------------------------------------------------------------- */
 void getPID(systemArgs *args)
 {
-	args->arg1 = getPID();
+	args->arg1 = getpid();
 }
 
 /* ------------------------------------------------------------------------
