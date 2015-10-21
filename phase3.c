@@ -355,6 +355,7 @@ void semV(systemArgs *args){
 	{
 		if (debugFlag)
 			USLOSS_Console("semV(): Attempted a \"V\" operation on a semaphore with wrong sys call number: %d.\n", args->number);
+			toUserMode();
 		return;
 	}
 	/* retrieves the semaphore location from the args struct */
@@ -400,11 +401,13 @@ void semFree(systemArgs *args)
 	{
 		if (debugFlag)
 			USLOSS_Console("semFree(): Attempted a \"Free\" operation on a semaphore with wrong sys call number: %d.\n", args->number);
+		toUserMode();
 		return;
 	}
 	int semNum = semFreeReal((int *)args->arg1);
 	/* place return value into arg4 */
 	args->arg4 = &semNum;
+	toUserMode();
 }
 
 int semFreeReal(int * semNum)
@@ -446,6 +449,7 @@ void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
 	args->arg4 = readtime();
+	toUserMode();
 
 }
 
@@ -459,6 +463,7 @@ void getTimeOfDay(systemArgs *args)
 void cpuTime(systemArgs *args)
 {
 	args->arg1 = readCurStartTime();
+	toUserMode();
 }
 
 /* ------------------------------------------------------------------------
@@ -471,6 +476,7 @@ void cpuTime(systemArgs *args)
 void getPID(systemArgs *args)
 {
 	args->arg1 = getpid();
+	toUserMode();
 }
 
 
@@ -485,6 +491,7 @@ void getPID(systemArgs *args)
 void nullSys3(systemArgs *args)
 {
 	USLOSS_Console("nullSys3(): Invalid System call: %d;\n Terminating process/n", args->number);
+	terminateReal(getpid());
 }
 
 /* adds a process to the list of processes blocked on a particular sempahore
