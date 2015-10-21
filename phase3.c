@@ -162,6 +162,7 @@ void spawn(systemArgs *args){
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
     int kidpid;
     kidpid = fork1(name, func, arg, stacksize, priority);
+    toUserMode();
     if(kidpid<0)
         return -1;
     else{
@@ -182,6 +183,9 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
 }/* spawnReal */
 
 void myWait(systemArgs *args){
+    if(debugFlag){
+        USLOSS_Console("myWait(): PSR before: %d\n", USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE);
+    }
     if(args->number != SYS_WAIT){
         if (debugFlag){
             USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
