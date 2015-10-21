@@ -112,7 +112,12 @@ int start2(char *arg){
      * You call waitReal (rather than Wait) because start2 is running
      * in kernel (not user) mode.
      */
+    if(debugFlag){
+        USLOSS_Console("start2(): after spawnReal(). \n");
+    }
+    
     pid = waitReal(&status);
+    toUserMode();
 
     return pid;
 
@@ -160,6 +165,9 @@ void spawn(systemArgs *args){
     
 }
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
+    if(debugFlag){
+        USLOSS_Console("spawnReal(): Starting spawnReal. \n");
+    }
     int kidpid;
     char * msg;
     int procBoxID = MboxCreate(0, 50);
@@ -174,6 +182,7 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     MboxSend(procBoxID, msg, 0);
 
     toUserMode();
+    kidpid = fork1(name, func, arg, stacksize, priority);
     if(kidpid<0)
         return -1;
     else{
@@ -225,7 +234,7 @@ void spawnLaunch(int (*func)(char *)){
 
 void myWait(systemArgs *args){
     if(debugFlag){
-        USLOSS_Console("myWait(): PSR before: %d\n", USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE);
+        USLOSS_Console("myWait(): Starting.\n");
     }
     if(args->number != SYS_WAIT){
         if (debugFlag){
@@ -244,6 +253,9 @@ void myWait(systemArgs *args){
 }
 
 int waitReal(int * status){
+    if(debugFlag){
+        USLOSS_Console("waitReal(): Starting.\n");
+    }
     int pid;
     ProcTableThree[getpid()%MAXPROC].status = WAIT_BLOCKED;
     pid = join(status);
