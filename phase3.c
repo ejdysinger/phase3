@@ -7,6 +7,7 @@
 #include <String.h>
 
 /* -------------------------- Prototypes ------------------------------------- */
+extern int start3(char *arg);
 void semV(systemArgs *args);
 int semVReal(int * semNum);
 void semFree(systemArgs *args);
@@ -16,7 +17,7 @@ void cpuTime(systemArgs *args);
 void getPID(systemArgs *args);
 void nullSys3(systemArgs *args);
 void spawn(systemArgs *args);
-void wait(systemArgs *args);
+void myWait(systemArgs *args);
 void terminate(systemArgs *args);
 void semAddMe(struct semaphore * target, int PID);
 int semRemoveMe(struct semaphore * target);
@@ -66,7 +67,7 @@ int start2(char *arg){
 
     /* place appropriate system call handlers in appropriate slots */
     systemCallVec[SYS_SPAWN] = spawn;
-    systemCallVec[SYS_WAIT] = wait;
+    systemCallVec[SYS_WAIT] = myWait;
     systemCallVec[SYS_TERMINATE] = terminate;
     systemCallVec[SYS_SEMCREATE] = semCreate;
     systemCallVec[SYS_SEMP] = semP;
@@ -112,7 +113,7 @@ int start2(char *arg){
      */
     pid = waitReal(&status);
 
-
+    return pid;
 
 } /* start2 */
 
@@ -173,7 +174,7 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     
 }/* spawnReal */
 
-void wait(systemArgs *args){
+void myWait(systemArgs *args){
     if(args->number != SYS_WAIT){
         if (debugFlag){
             USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
@@ -322,24 +323,24 @@ void semP(systemArgs *args){
 } */
 
 void semPReal(int index){
-	struct semaphore * target = &SemTable[*index % MAX_SEMS];
-	char * msg;
+	struct semaphore * target = &SemTable[index % MAX_SEMS];
+	char * msg = "hi";
 	/* enter mutex */
-	mboxSend(target->mutexBox, msg, 0);
-	while(){
+	MboxSend(target->mutexBox, msg, 0);
+	while(1){
 		/* enter the semaphore mbox */
-		mboxSend(target->seMboxID, msg, 0);
+		MboxSend(target->seMboxID, msg, 0);
 		/* if the semaphore value can be decremented, do so */
 		if(target->value > 0){
 			target->value--;
 			break;
 		}
 		/* otherwise execute a receive on the semaphore mbox */
-		mboxReceive(target->seMboxID, msg, 0);
+		MboxReceive(target->seMboxID, msg, 0);
 	}
 	/* receive from both semaphore and mutex mbox */
-	mboxCondReceive(target->seMboxID, msg, 0);
-	mboxCondReceive(target->mutexBox, msg, 0);
+	MboxCondReceive(target->seMboxID, msg, 0);
+	MboxCondReceive(target->mutexBox, msg, 0);
 }
 
 /* ------------------------------------------------------------------------
@@ -367,7 +368,7 @@ void semV(systemArgs *args){
 int semVReal(int * semNum)
 {
 	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
-	char * msg;
+	char * msg = "hi";
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
@@ -420,8 +421,8 @@ int semFreeReal(int * semNum)
 		reply = 1;
 		int iter;
 		for(iter = target->blockedProc; iter > 0; iter--){
-			MboxCondSend(target->mutexBox);
-			MboxCondSend(target->seMboxID);
+			MboxCondSend(target->mutexBox, "", 0);
+			MboxCondSend(target->seMboxID, "", 0);
 		}
 	}else
 		reply = 0;
