@@ -363,6 +363,7 @@ void semV(systemArgs *args){
 	semNum = semVReal((int *)args->arg1);
 	/* if the semaphore handle is invalid return -1 */
 	args->arg4 =  &semNum;
+	toUserMode();
 }
 
 /* helper function for semV */
