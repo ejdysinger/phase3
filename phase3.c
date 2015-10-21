@@ -444,7 +444,7 @@ int semFreeReal(int * semNum)
 void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
-
+	args->arg4 = readtime();
 
 }
 
