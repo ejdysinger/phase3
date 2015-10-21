@@ -338,7 +338,7 @@ void semV(systemArgs *args)
 	int semNum;
 	semNum = semVHelper((int *)args->arg1);
 	/* if the semaphore handle is invalid return -1 */
-	args->arg4 =  semNum;
+	args->arg4 =  &semNum;
 }
 
 /* helper function for semV */
@@ -415,7 +415,7 @@ void semFree(systemArgs *args)
 	}
 	int semNum = semFreeHelper((int *)args->arg1);
 	/* place return value into arg4 */
-	args->arg4 = semNum;
+	args->arg4 = &semNum;
 }
 
 int semFreeHelper(int * semNum)
