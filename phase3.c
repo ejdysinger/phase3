@@ -320,8 +320,7 @@ void semPReal(int index){
    Returns - -1 if semaphore handle is invalid, 0 otherwise
    Side Effects - none
    ----------------------------------------------------------------------- */
-void semV(systemArgs *args)
-{
+void semV(systemArgs *args){
 	if(args->number != SYS_SEMV)
 	{
 		if (debugFlag)
@@ -336,19 +335,29 @@ void semV(systemArgs *args)
 }
 
 /* helper function for semV */
-int semVHelper(int * semNum)
-{
+int semVHelper(int * semNum){
 	struct semaphore * target = SemTable[semNum % MAX_SEMS];
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
-	/* increment if possible */
-	if(target->value < target->maxValue)
-		target->value++;
-	/* block on the semaphore and add to semaphore waitlist if not */
-	else{
-		semAddMe(target, getPID);
-	MboxSend(target->seMboxID, NULL, NULL);
+	/* increment if possible, block on the semaphore's mbox otherwise */
+	while(){
+		/* blocks if the semaphore is maxed out */
+		if(target->value >= target->maxValue){
+			// add the process to the blocked list
+			semAddMe(target, getPID);
+			// receive block on the mailbox
+			MboxReceive(target->seMboxID, NULL, NULL);
+			// immediately remove from the list on return
+			semRemoveMe(target);
+			/* if the semaphore became inactive while the process was blocked, call terminate */
+			if(target->status == INACTIVE)
+				terminateReal(getpid());
+		}
+		/* attempts to increment the semaphore; if impossible reblocks */
+		if(target->value < target->maxValue)
+			target->value++;
+	}
 	return 0;
 }
 
@@ -473,8 +482,9 @@ void cpuTime(systemArgs *args)
    ----------------------------------------------------------------------- */
 void getPID(systemArgs *args)
 {
-	args->arg1 = getPID();
+	args->arg1 = getpid();
 }
+
 
 /* ------------------------------------------------------------------------
    Name - nullSys3
