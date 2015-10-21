@@ -9,5 +9,5 @@ typedef struct semaphore
 	int waitList[MAXPROC];
 	int head;
 	int tail;
-	int seMbox; // position in table of the mbox
+	int seMboxID; // position in table of the mbox
 } semaphore;

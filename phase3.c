@@ -104,6 +104,8 @@ int start2(char *arg){
      */
     pid = waitReal(&status);
 
+
+
 } /* start2 */
 
 
@@ -247,7 +249,7 @@ void semCreate(systemArgs *args){
 int semCreateReal(int value){
     struct semaphore newSem;
     int mboxId = MboxCreate(0, 50);
-    newSem.seMbox = mboxId;
+    newSem.seMboxID = mboxId;
     newSem.status=ACTIVE;
     newSem.head = -1;
     newSem.tail = -1;
@@ -284,7 +286,7 @@ void semP(systemArgs *args){
 }
 
 void semPReal(int index){
-    int mboxId = SemTable[index%MAXSEMS].seMbox;
+    int mboxId = SemTable[index%MAXSEMS].seMboxID;
     char * msg;
     // List is empty
     if(SemTable[index%MAXSEMS].head == -1){
@@ -330,7 +332,7 @@ void semV(systemArgs *args)
 	int semNum;
 	semNum = semVHelper((int *)args->arg1);
 	/* if the semaphore handle is invalid return -1 */
-	args->arg4 =  semNum == -1 ? -1 : 0;
+	args->arg4 =  semNum;
 }
 
 /* helper function for semV */
@@ -344,9 +346,9 @@ int semVHelper(int * semNum)
 	if(target->value < target->maxValue)
 		target->value++;
 	/* block on the semaphore and add to semaphore waitlist if not */
-	else
-		semBlockMe(target, getPID);
-	MboxSend(target->seMbox, NULL, NULL);
+	else{
+		semAddMe(target, getPID);
+	MboxSend(target->seMboxID, NULL, NULL);
 	return 0;
 }
 
@@ -427,6 +429,13 @@ int semFreeHelper(int * semNum)
 		}
 	}else
 		reply = 0;
+	/* free the mailbox */
+	MboxRelease(target->seMboxID);
+
+	/* change the status of the semaphore to inactive */
+	target->status = INACTIVE;
+	/* return the status */
+	return reply;
 }
 
 /* ------------------------------------------------------------------------
@@ -440,6 +449,7 @@ void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
 
+
 }
 
 /* ------------------------------------------------------------------------
@@ -451,7 +461,7 @@ void getTimeOfDay(systemArgs *args)
    ----------------------------------------------------------------------- */
 void cpuTime(systemArgs *args)
 {
-	args->arg1 = getPID();
+	args->arg1 = readCurStartTime();
 }
 
 /* ------------------------------------------------------------------------
