@@ -9,5 +9,7 @@ typedef struct semaphore
 	int waitList[MAXPROC];
 	int head;
 	int tail;
-	int seMboxID; // position in table of the mbox
+	int blockedProc;
+	int mutexBox; // address of the mutex mbox
+	int seMboxID; // address of the sem mbox
 } semaphore;

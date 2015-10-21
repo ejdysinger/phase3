@@ -4,10 +4,13 @@
 #include "phase3.h"
 #include <usyscall.h>
 #include "sems.h"
+#include <String.h>
 
 /* -------------------------- Prototypes ------------------------------------- */
 void semV(systemArgs *args);
+int semVReal(int * semNum);
 void semFree(systemArgs *args);
+int semFreeReal(int * semNum);
 void getTimeOfDay(systemArgs *args);
 void cpuTime(systemArgs *args);
 void getPID(systemArgs *args);
@@ -19,6 +22,11 @@ void semAddMe(struct semaphore * target, int PID);
 int semRemoveMe(struct semaphore * target);
 void semCreate(systemArgs *args);
 void semP(systemArgs *args);
+void terminateReal(int currentpid);
+int semCreateReal(int value);
+int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority);
+int waitReal(int * status);
+void semPReal(int index);
 
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
@@ -61,7 +69,7 @@ int start2(char *arg){
     systemCallVec[SYS_WAIT] = wait;
     systemCallVec[SYS_TERMINATE] = terminate;
     systemCallVec[SYS_SEMCREATE] = semCreate;
-    systemCallVec[SYS_SEMP];
+    systemCallVec[SYS_SEMP] = semP;
     systemCallVec[SYS_SEMV] = semV;;
     systemCallVec[SYS_SEMFREE] = semFree;
     systemCallVec[SYS_GETTIMEOFDAY] = getTimeOfDay;
@@ -108,7 +116,7 @@ int start2(char *arg){
 
 } /* start2 */
 
-
+/* handlers include : */
 void spawn(systemArgs *args){
     if(args->number != SYS_SPAWN){
         if (debugFlag){
@@ -119,7 +127,7 @@ void spawn(systemArgs *args){
         return;
     }
     // Priority out of bounds
-    if(args->arg4>6 || args->arg4<1){
+    if((int)args->arg4>6 || (int)args->arg4<1){
         if (debugFlag){
             USLOSS_Console("spawn(): Attempted to spawn process with priority out of bounds.\n");
         }
@@ -128,7 +136,7 @@ void spawn(systemArgs *args){
         return;
     }
     
-    if(args->arg3 < USLOSS_MIN_STACK){
+    if((int)args->arg3 < USLOSS_MIN_STACK){
         if (debugFlag){
             USLOSS_Console("spawn(): Attempted to spawn process stack size too small.\n");
         }
@@ -137,9 +145,9 @@ void spawn(systemArgs *args){
         return;
     }
     int result;
-    result = spawnReal(args->arg5, args->arg1, args->arg2, args->arg3,args->arg4);
+    result = spawnReal(args->arg5, args->arg1, args->arg2, (int)args->arg3,(int)args->arg4);
     
-    args->arg1 = (void *)result;
+    args->arg1 = &result;
     args->arg4 = (void *)0;
     
 }
@@ -175,9 +183,9 @@ void wait(systemArgs *args){
     int pid;
     int status;
     pid = waitReal(&status);
-    args->arg1 = (void *)pid;
-    args->arg2 = status;
-    args->arg4 = pid==-1 ? pid : 0;
+    args->arg1 = &pid;
+    args->arg2 = &status;
+    args->arg4 = pid==-1 ? &pid : 0;
 }
 
 int waitReal(int * status){
@@ -222,7 +230,7 @@ void terminateReal(int pid){
         if(debugFlag){
             USLOSS_Console("terminateReal(): Start 3 terminated, halting...\n");
         }
-        USLoss_halt(0);
+        USLOSS_Halt(0);
     }
     
 }
@@ -236,23 +244,27 @@ void semCreate(systemArgs *args){
     }
     
     if(semsUsed>MAXSEMS || args->arg1 < 0){
-        args->arg4 = -1;
+        args->arg4 = (void *)-1;
         return;
     }
     int index;
-    index = semCreateReal(args->arg1);
-    args->arg1 = index;
+    index = semCreateReal((int)args->arg1);
+    args->arg1 = &index;
     args->arg4 = 0;
     
 }
 
 int semCreateReal(int value){
     struct semaphore newSem;
+    // create mboxes for P operation mutex and for semaphore manipulation
     int mboxId = MboxCreate(0, 50);
+    int mutexBoxId = MboxCreate(0, 50);
     newSem.seMboxID = mboxId;
+    newSem.mutexBox = mutexBoxId;
     newSem.status=ACTIVE;
     newSem.head = -1;
     newSem.tail = -1;
+    newSem.blockedProc = 0;
     newSem.value = value;
     int i;
     for(i=0;i<MAXSEMS;i++){
@@ -273,19 +285,19 @@ void semP(systemArgs *args){
         return;
     }
     int index;
-    index = args->arg1;
+    index = (int)args->arg1;
     if(index > MAXSEMS-1 || SemTable[index].status == INACTIVE){
         if(debugFlag){
             USLOSS_Console("semP(): Semaphore inactive or index out of bounds at index: %d.\n", index);
         }
-        args->arg4 = -1;
+        args->arg4 = (void *)-1;
         return;
     }
     semPReal(index);
     args->arg4=0;
 }
 
-void semPReal(int index){
+/* void semPReal(int index){
     int mboxId = SemTable[index%MAXSEMS].seMboxID;
     char * msg;
     // List is empty
@@ -307,12 +319,29 @@ void semPReal(int index){
 
     MboxReceive(mboxId, msg, 50);
     SemTable[index].value--;
+} */
+
+void semPReal(int index){
+	struct semaphore * target = &SemTable[*index % MAX_SEMS];
+	char * msg;
+	/* enter mutex */
+	mboxSend(target->mutexBox, msg, 0);
+	while(){
+		/* enter the semaphore mbox */
+		mboxSend(target->seMboxID, msg, 0);
+		/* if the semaphore value can be decremented, do so */
+		if(target->value > 0){
+			target->value--;
+			break;
+		}
+		/* otherwise execute a receive on the semaphore mbox */
+		mboxReceive(target->seMboxID, msg, 0);
+	}
+	/* receive from both semaphore and mutex mbox */
+	mboxCondReceive(target->seMboxID, msg, 0);
+	mboxCondReceive(target->mutexBox, msg, 0);
 }
 
-
-
-
-/* handlers include : */
 /* ------------------------------------------------------------------------
    Name - SemV
    Purpose - performs a "V" operation on a semaphore
@@ -329,74 +358,30 @@ void semV(systemArgs *args){
 	}
 	/* retrieves the semaphore location from the args struct */
 	int semNum;
-	semNum = semVHelper((int *)args->arg1);
+	semNum = semVReal((int *)args->arg1);
 	/* if the semaphore handle is invalid return -1 */
-	args->arg4 =  semNum;
+	args->arg4 =  &semNum;
 }
 
 /* helper function for semV */
-int semVHelper(int * semNum){
-	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+int semVReal(int * semNum)
+{
+	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
+	char * msg;
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
-	/* increment if possible, block on the semaphore's mbox otherwise */
-	while(){
-		/* blocks if the semaphore is maxed out */
-		if(target->value >= target->maxValue){
-			// add the process to the blocked list
-			semAddMe(target, getPID);
-			// receive block on the mailbox
-			MboxReceive(target->seMboxID, NULL, NULL);
-			// immediately remove from the list on return
-			semRemoveMe(target);
-			/* if the semaphore became inactive while the process was blocked, call terminate */
-			if(target->status == INACTIVE)
-				terminateReal(getpid());
-		}
-		/* attempts to increment the semaphore; if impossible reblocks */
-		if(target->value < target->maxValue)
-			target->value++;
-	}
+	/* enter mutex */
+	target->blockedProc++;
+	MboxSend(target->seMboxID, msg, 0);
+	target->blockedProc--;
+	/* increment if possible */
+	if(target->value < target->maxValue)
+		target->value++;
+	/* exit mutex */
+	MboxCondReceive(target->seMboxID, msg, 0);
+	/* return 0 to indicate success */
 	return 0;
-}
-
-/* adds a process to the list of processes blocked on a particular sempahore */
-void semAddMe(struct semaphore * target, int PID)
-{
-	// if head and tail are both -1, the list is empty
-	if(target->head == -1 && target->tail == -1){
-		target->head = 0;
-		target->waitList[target->head] = PID;
-	}
-	// if tail is -1 and head is not, the list has 1 element
-	else if(target->head != -1 && target->tail == -1){
-		target->tail = target->head + 1;
-		target->waitList[target->tail] = PID;
-	}else{
-		target->tail = (target->tail + 1) % MAXPROC;
-		target->waitList[target->tail] = PID;
-	}
-}
-
-/* removes the process from the list of processes blocked on a particular
- * semaphore and returns its PID or returns -1 */
-int semRemoveMe(struct semaphore * target)
-{
-	int reply;
-	//if head and tail are both -1, the list is empty
-	if(target->head == -1 && target->tail == -1){
-		return -1;
-	}
-	reply = target->waitList[target->head];
-	target->waitList[target->head] = 0;
-	// if tail is -1 and head is not, the list has 1 element
-	if(target->head != -1 && target->tail == -1)
-		target->head = -1;
-	else
-		target->head = (target->head +1) % MAXPROC;
-
-	return reply;
 }
 
 /* ------------------------------------------------------------------------
@@ -416,25 +401,27 @@ void semFree(systemArgs *args)
 			USLOSS_Console("semFree(): Attempted a \"Free\" operation on a semaphore with wrong sys call number: %d.\n", args->number);
 		return;
 	}
-	int semNum = semFreeHelper((int *)args->arg1);
+	int semNum = semFreeReal((int *)args->arg1);
 	/* place return value into arg4 */
-	args->arg4 = semNum;
+	args->arg4 = &semNum;
 }
 
-int semFreeHelper(int * semNum)
+int semFreeReal(int * semNum)
 {
-	struct semaphore * target = SemTable[semNum % MAX_SEMS];
+	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
 	int reply;
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
-	/* if there are processes waiting on the mailbox */
-	if(target->head != -1){
+	/* set the semaphore status to inactive */
+	target->status = INACTIVE;
+	/* if there are processes waiting on the mailboxes, free them */
+	if(target->blockedProc != 0){
 		reply = 1;
 		int iter;
-		for(iter = target->head; target->waitList[iter] != 0; iter = (iter + 1)%MAXPROC){
-			terminateReal(target->waitList[iter]);
-			target->waitList[iter] = 0;
+		for(iter = target->blockedProc; iter > 0; iter--){
+			MboxCondSend(target->mutexBox);
+			MboxCondSend(target->seMboxID);
 		}
 	}else
 		reply = 0;
@@ -498,3 +485,41 @@ void nullSys3(systemArgs *args)
 {
 	USLOSS_Console("nullSys3(): Invalid System call: %d;\n Terminating process/n", args->number);
 }
+
+/* adds a process to the list of processes blocked on a particular sempahore
+void semAddMe(struct semaphore * target, int PID)
+{
+	// if head and tail are both -1, the list is empty
+	if(target->head == -1 && target->tail == -1){
+		target->head = 0;
+		target->waitList[target->head] = PID;
+	}
+	// if tail is -1 and head is not, the list has 1 element
+	else if(target->head != -1 && target->tail == -1){
+		target->tail = target->head + 1;
+		target->waitList[target->tail] = PID;
+	}else{
+		target->tail = (target->tail + 1) % MAXPROC;
+		target->waitList[target->tail] = PID;
+	}
+}
+
+/* removes the process from the list of processes blocked on a particular
+ * semaphore and returns its PID or returns -1
+int semRemoveMe(struct semaphore * target)
+{
+	int reply;
+	//if head and tail are both -1, the list is empty
+	if(target->head == -1 && target->tail == -1){
+		return -1;
+	}
+	reply = target->waitList[target->head];
+	target->waitList[target->head] = 0;
+	// if tail is -1 and head is not, the list has 1 element
+	if(target->head != -1 && target->tail == -1)
+		target->head = -1;
+	else
+		target->head = (target->head +1) % MAXPROC;
+
+	return reply;
+}*/
