@@ -4,7 +4,8 @@
 #include "phase3.h"
 #include <usyscall.h>
 #include "sems.h"
-#include <String.h>
+#include <string.h>
+#include <stdio.h>
 
 /* -------------------------- Prototypes ------------------------------------- */
 extern int start3(char *arg);
