@@ -23,6 +23,9 @@ struct ProcStruct {
     int status;
     int children[MAXPROC];
     char name[MAXNAME];
+    int procMbox;
+    int (*func)(char *);
+    char *arg;
 //    procPtr         nextProcPtr;
 //    procPtr         childProcPtr;
 //    procPtr         nextSiblingPtr;

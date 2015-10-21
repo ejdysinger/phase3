@@ -161,7 +161,18 @@ void spawn(systemArgs *args){
 }
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
     int kidpid;
-    kidpid = fork1(name, func, arg, stacksize, priority);
+    char * msg;
+    int procBoxID = MboxCreate(0, 50);
+    ProcTableThree[getpid()%MAXPROC].procMbox = procBoxID;
+    kidpid = fork1(name, spawnLaunch, arg, stacksize, priority);
+
+    ProcTableThree[kidpid % MAXPROC].func = func;
+    strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
+    ProcTableThree[kidpid % MAXPROC].pid = kidpid;
+    ProcTableThree[kidpid % MAXPROC].children = NULL;
+
+    MboxSend(procBoxID, msg, 0);
+
     toUserMode();
     if(kidpid<0)
         return -1;
@@ -181,6 +192,36 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     }
     
 }/* spawnReal */
+
+/* ------------------------------------------------------------------------
+   Name - SpawnLaunch()
+   Purpose - spawnLaunch() will begin executing the function passed to Spawn.
+    		 spawnLaunch() will need to switch to user-mode before allowing
+    		 user code to execute.
+   Parameters - a struct of arguments
+   Returns - nothing
+   Side Effects - none
+   ----------------------------------------------------------------------- */
+void spawnLaunch(int (*func)(char *)){
+
+	if (DEBUG && debugflag){
+		USLOSS_Console("spawnLaunch(): started function: %s\n", get);
+	}
+
+	int result;
+	char * msg;
+	MBoxReceive(ProcTableThree[getpid()%MAXPROC].procMbox, msg, 0);
+
+	/* switch to user mode */
+	toUserMode();
+	/* Call the function passed to fork1, and capture its return value */
+	result = ProcTableThree[getpid()%MAXPROC].func;
+
+	if (DEBUG && debugflag)
+		USLOSS_Console("Process %d returned to launch\n", Current->pid);
+
+	quit(result);
+}
 
 void myWait(systemArgs *args){
     if(debugFlag){
