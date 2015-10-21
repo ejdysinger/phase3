@@ -29,6 +29,7 @@ int semCreateReal(int value);
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority);
 int waitReal(int * status);
 void semPReal(int index);
+void toUserMode();
 
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
@@ -107,7 +108,6 @@ int start2(char *arg){
      * return to the user code that called Spawn.
      */
     pid = spawnReal("start3", start3, NULL, 4*USLOSS_MIN_STACK, 3);
-
     /* Call the waitReal version of your wait code here.
      * You call waitReal (rather than Wait) because start2 is running
      * in kernel (not user) mode.
@@ -120,6 +120,9 @@ int start2(char *arg){
 
 /* handlers include : */
 void spawn(systemArgs *args){
+    if(debugFlag){
+        USLOSS_Console("spawn(): Starting spawn. \n");
+    }
     if(args->number != SYS_SPAWN){
         if (debugFlag){
             USLOSS_Console("spawn(): Attempted to spawn process with wrong sys call number: %d.\n", args->number);
@@ -152,6 +155,9 @@ void spawn(systemArgs *args){
     args->arg1 = &result;
     args->arg4 = (void *)0;
     
+    toUserMode();
+    
+    
 }
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority){
     int kidpid;
@@ -180,6 +186,7 @@ void myWait(systemArgs *args){
         if (debugFlag){
             USLOSS_Console("wait(): Attempted to wait a process with wrong sys call number: %d.\n", args->number);
         }
+        toUserMode();
         return;
     }
     int pid;
@@ -188,6 +195,7 @@ void myWait(systemArgs *args){
     args->arg1 = &pid;
     args->arg2 = &status;
     args->arg4 = pid==-1 ? &pid : 0;
+    toUserMode();
 }
 
 int waitReal(int * status){
@@ -205,10 +213,12 @@ void terminate(systemArgs *args){
         if (debugFlag){
             USLOSS_Console("terminate(): Attempted to terminate a process with wrong sys call number: %d.\n", args->number);
         }
+        toUserMode();
         return;
     }
     int currentpid = getpid();
     terminateReal(currentpid);
+    toUserMode();
 }
 
 void terminateReal(int pid){
@@ -242,6 +252,7 @@ void semCreate(systemArgs *args){
         if (debugFlag){
             USLOSS_Console("semCreate(): Attempted to semCreate wrong sys call number: %d.\n", args->number);
         }
+        toUserMode();
         return;
     }
     
@@ -253,7 +264,7 @@ void semCreate(systemArgs *args){
     index = semCreateReal((int)args->arg1);
     args->arg1 = &index;
     args->arg4 = 0;
-    
+    toUserMode();
 }
 
 int semCreateReal(int value){
@@ -284,6 +295,7 @@ void semP(systemArgs *args){
         if (debugFlag){
             USLOSS_Console("semP(): Attempted to semP with wrong sys call number: %d.\n", args->number);
         }
+        toUserMode();
         return;
     }
     int index;
@@ -297,6 +309,7 @@ void semP(systemArgs *args){
     }
     semPReal(index);
     args->arg4=0;
+    toUserMode();
 }
 
 /* void semPReal(int index){
@@ -533,3 +546,15 @@ int semRemoveMe(struct semaphore * target)
 
 	return reply;
 }*/
+
+void toUserMode(){
+    if(debugFlag){
+        USLOSS_Console("toUserMode(): switching to User Mode.\n");
+    }
+    unsigned int psr = USLOSS_PsrGet();
+    USLOSS_Console("toUserMode(): PSR before: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
+    psr = (psr & ~1);
+    //psr &= ~(0 << USLOSS_PSR_CURRENT_MODE);
+    USLOSS_PsrSet(psr);
+    USLOSS_Console("toUserMode(): PSR after: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
+}
