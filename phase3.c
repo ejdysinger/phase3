@@ -30,6 +30,7 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
 int waitReal(int * status);
 void semPReal(int index);
 void toUserMode();
+void spawnLaunch(void);
 
 /* -------------------------- Globals ------------------------------------- */
 struct ProcStruct ProcTableThree[MAXPROC];
@@ -170,36 +171,41 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
         USLOSS_Console("spawnReal(): Starting spawnReal. \n");
     }
     int kidpid;
-    char * msg;
+    char * msg = "hi";
     int procBoxID = MboxCreate(0, 50);
     ProcTableThree[getpid()%MAXPROC].procMbox = procBoxID;
     kidpid = fork1(name, spawnLaunch, arg, stacksize, priority);
-
-    ProcTableThree[kidpid % MAXPROC].func = func;
-    strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
-    ProcTableThree[kidpid % MAXPROC].pid = kidpid;
-    ProcTableThree[kidpid % MAXPROC].children = NULL;
-
-    MboxSend(procBoxID, msg, 0);
-
-    toUserMode();
-    kidpid = fork1(name, func, arg, stacksize, priority);
+    if(debugFlag){
+        USLOSS_Console("spawnReal(): After fork1. \n");
+    }
     if(kidpid<0)
         return -1;
-    else{
-        int i;
-        int parentpid = getpid();
-        for(i=0;i<MAXPROC;i++){
-            if(ProcTableThree[parentpid%MAXPROC].children[i] == INACTIVE){
-                ProcTableThree[parentpid%MAXPROC].children[i] = kidpid;
-            }
+    int i;
+    int parentpid = getpid();
+    for(i=0;i<MAXPROC;i++){
+        if(ProcTableThree[parentpid%MAXPROC].children[i] == INACTIVE){
+            ProcTableThree[parentpid%MAXPROC].children[i] = kidpid;
         }
-        strcpy(ProcTableThree[kidpid%MAXPROC].name, name);
-        ProcTableThree[kidpid%MAXPROC].pid = kidpid;
-        ProcTableThree[kidpid%MAXPROC].status = ACTIVE;
-        memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
-        return kidpid;
     }
+    strcpy(ProcTableThree[kidpid%MAXPROC].name, name);
+    ProcTableThree[kidpid%MAXPROC].status = ACTIVE;
+    ProcTableThree[kidpid % MAXPROC].func = func;
+
+    ProcTableThree[kidpid % MAXPROC].arg = arg;
+    //strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
+
+    ProcTableThree[kidpid % MAXPROC].pid = kidpid;
+
+    memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
+    if(debugFlag){
+        USLOSS_Console("spawnReal(): Before mboxsend. \n");
+    }
+    MboxSend(procBoxID, msg, 0);
+    if (debugFlag){
+        USLOSS_Console("spawnReal(): After mboxsend.\n");
+    }
+    return kidpid;
+    
     
 }/* spawnReal */
 
@@ -212,25 +218,27 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
    Returns - nothing
    Side Effects - none
    ----------------------------------------------------------------------- */
-void spawnLaunch(int (*func)(char *)){
+void spawnLaunch(){
 
-	if (DEBUG && debugflag){
-		USLOSS_Console("spawnLaunch(): started function: %s\n", get);
-	}
-
+    if(debugFlag){
+        USLOSS_Console("spawnLaunch(): Starting. \n");
+    }
 	int result;
-	char * msg;
-	MBoxReceive(ProcTableThree[getpid()%MAXPROC].procMbox, msg, 0);
+    char * msg = NULL;
+    if (debugFlag){
+        USLOSS_Console("spawnLaunch(): started function: %s\n", ProcTableThree[getpid()%MAXPROC].name);
+    }
+	MboxReceive(ProcTableThree[getpid()%MAXPROC].procMbox, msg, 0);
+    //MboxRelease(ProcTableThree[getpid()%MAXPROC].procMbox);
 
+    if (debugFlag){
+        USLOSS_Console("spawnLaunch(): started function: %s\n", ProcTableThree[getpid()%MAXPROC].name);
+    }
 	/* switch to user mode */
 	toUserMode();
 	/* Call the function passed to fork1, and capture its return value */
-	result = ProcTableThree[getpid()%MAXPROC].func;
-
-	if (DEBUG && debugflag)
-		USLOSS_Console("Process %d returned to launch\n", Current->pid);
-
-	quit(result);
+	result = ProcTableThree[getpid()%MAXPROC].func(ProcTableThree[getpid()%MAXPROC].arg);
+    terminate(NULL);
 }
 
 void myWait(systemArgs *args){
@@ -625,13 +633,15 @@ int semRemoveMe(struct semaphore * target)
 }*/
 
 void toUserMode(){
+    
     if(debugFlag){
         USLOSS_Console("toUserMode(): switching to User Mode.\n");
     }
-    unsigned int psr = USLOSS_PsrGet();
-    USLOSS_Console("toUserMode(): PSR before: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
-    psr = (psr & ~1);
-    //psr &= ~(0 << USLOSS_PSR_CURRENT_MODE);
-    USLOSS_PsrSet(psr);
-    USLOSS_Console("toUserMode(): PSR after: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
+    USLOSS_PsrSet(USLOSS_PsrGet() & ~USLOSS_PSR_CURRENT_MODE);
+//    unsigned int psr = USLOSS_PsrGet();
+//    USLOSS_Console("toUserMode(): PSR before: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
+//    psr = (psr & ~1);
+//    //psr &= ~(0 << USLOSS_PSR_CURRENT_MODE);
+//    USLOSS_PsrSet(psr);
+//    USLOSS_Console("toUserMode(): PSR after: %d\n", psr & USLOSS_PSR_CURRENT_MODE);
 }
