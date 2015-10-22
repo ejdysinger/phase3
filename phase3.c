@@ -67,6 +67,7 @@ int start2(char *arg){
     for(iter = 0; iter < MAXPROC ; iter++){
         ProcTableThree[iter].status = INACTIVE;
         ProcTableThree[iter].procMbox=-1;
+        memset(ProcTableThree[iter].children, INACTIVE, sizeof(ProcTableThree[iter].children));
     }
 
     /* place appropriate system call handlers in appropriate slots */
@@ -314,10 +315,10 @@ void terminateReal(int pid){
         }
         else{
             terminateReal(ProcTableThree[pid%MAXPROC].children[i]);
+            zap(ProcTableThree[pid%MAXPROC].children[i]);
             ProcTableThree[pid%MAXPROC].children[i] = INACTIVE;
         }
     }
-    zap(pid);
     /* Remove process from ProcessTable after it quits */
     ProcTableThree[pid%MAXPROC].status = INACTIVE;
     
