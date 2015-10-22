@@ -397,20 +397,32 @@ void semP(systemArgs *args){
 void semPReal(int index){
 	struct semaphore * target = &SemTable[index % MAX_SEMS];
 	char * msg = "hi";
-	/* enter mutex */
-	MboxSend(target->mutexBox, msg, 0);
 	while(1){
+		/* enter mutex */
+		target->blockedProc++;
+		MboxSend(target->mutexBox, msg, 0);
+		/* if the semaphore has been cleared since the process blocked, terminate */
 		/* enter the semaphore mbox */
 		MboxSend(target->seMboxID, msg, 0);
+		/* if the semaphore has been cleared since the process blocked, terminate */
+		if(target->status == INACTIVE){
+			MboxCondReceive(target->seMboxID, msg, 0);
+			MboxCondReceive(target->mutexBox, msg, 0);
+			terminateReal(getpid());
+			break;
+		}
 		/* if the semaphore value can be decremented, do so */
 		if(target->value > 0){
 			target->value--;
 			break;
 		}
-		/* otherwise execute a receive on the semaphore mbox */
-		MboxReceive(target->seMboxID, msg, 0);
+		/* otherwise exit the semaphore and mutex mboxes */
+		target->blockedProc--;
+		MboxCondReceive(target->seMboxID, msg, 0);
+		MboxCondReceive(target->mutexBox, msg, 0);
 	}
-	/* receive from both semaphore and mutex mbox */
+	/* exit both semaphore and mutex mbox */
+	target->blockedProc--;
 	MboxCondReceive(target->seMboxID, msg, 0);
 	MboxCondReceive(target->mutexBox, msg, 0);
 }
@@ -443,18 +455,23 @@ int semVReal(int * semNum)
 {
 	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
 	char * msg = "hi";
-	/* check if valid semaphore */
-	if(target->status == INACTIVE)
-		return -1;
 	/* enter mutex */
 	target->blockedProc++;
+	MboxSend(target->mutexBox, msg, 0);
 	MboxSend(target->seMboxID, msg, 0);
-	target->blockedProc--;
+	/* check if valid semaphore */
+	if(target->status == INACTIVE){
+		MboxCondReceive(target->seMboxID, msg, 0);
+		MboxCondReceive(target->mutexBox, msg, 0);
+		return -1;
+	}
 	/* increment if possible */
 	if(target->value < target->maxValue)
 		target->value++;
+	target->blockedProc--;
 	/* exit mutex */
 	MboxCondReceive(target->seMboxID, msg, 0);
+	MboxCondReceive(target->mutexBox, msg, 0);
 	/* return 0 to indicate success */
 	return 0;
 }
@@ -487,6 +504,9 @@ int semFreeReal(int * semNum)
 {
 	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
 	int reply;
+	char * msg = "hi";
+	MboxSend(target->mutexBox, msg, 0);
+	MboxSend(target->seMboxID, msg, 0);
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
@@ -502,11 +522,11 @@ int semFreeReal(int * semNum)
 		}
 	}else
 		reply = 0;
+	MboxCondReceive(target->seMboxID, msg, 0);
+	MboxCondReceive(target->mutexBox, msg, 0);
 	/* free the mailbox */
 	MboxRelease(target->seMboxID);
-
-	/* change the status of the semaphore to inactive */
-	target->status = INACTIVE;
+	MboxRelease(target->mutexBox);
 	/* return the status */
 	return reply;
 }
@@ -551,7 +571,6 @@ void getPID(systemArgs *args)
 	args->arg1 = getpid();
 	toUserMode();
 }
-
 
 /* ------------------------------------------------------------------------
    Name - nullSys3
