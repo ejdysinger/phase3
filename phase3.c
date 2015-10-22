@@ -38,7 +38,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 0;
+int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
 
 
@@ -386,7 +386,7 @@ void semCreate(systemArgs *args){
         return;
     }
     
-    if(semsUsed>MAXSEMS || args->arg1 < 0){
+    if(semsUsed>=MAXSEMS || args->arg1 < 0){
         args->arg4 = (void *)-1;
         return;
     }
