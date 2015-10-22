@@ -20,6 +20,7 @@
 
 struct ProcStruct {
     int pid;
+    int parentPid;
     int status;
     int children[MAXPROC];
     char name[MAXNAME];

@@ -40,7 +40,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 1;
+int debugFlag = 0;
 /* ------------------------------------------------------------------------ */
 
 
@@ -67,6 +67,7 @@ int start2(char *arg){
     for(iter = 0; iter < MAXPROC ; iter++){
         ProcTableThree[iter].status = INACTIVE;
         ProcTableThree[iter].procMbox=-1;
+        ProcTableThree[iter].parentPid=-1;
         memset(ProcTableThree[iter].children, INACTIVE, sizeof(ProcTableThree[iter].children));
     }
 
@@ -120,7 +121,7 @@ int start2(char *arg){
     }
     
     pid = waitReal(&status);
-    toUserMode();
+    //toUserMode();
 
     return pid;
 
@@ -185,12 +186,17 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     for(i=0;i<MAXPROC;i++){
         if(ProcTableThree[parentpid%MAXPROC].children[i] == INACTIVE){
             ProcTableThree[parentpid%MAXPROC].children[i] = kidpid;
+            if(debugFlag){
+                USLOSS_Console("spawnReal(): Parent: %d, Child: %d\n", parentpid,kidpid);
+            }
+            break;
         }
     }
     strcpy(ProcTableThree[kidpid%MAXPROC].name, name);
     ProcTableThree[kidpid%MAXPROC].status = ACTIVE;
     ProcTableThree[kidpid % MAXPROC].func = func;
     ProcTableThree[kidpid % MAXPROC].arg = arg;
+    ProcTableThree[kidpid % MAXPROC].parentPid = parentpid;
     //strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
     ProcTableThree[kidpid % MAXPROC].pid = kidpid;
     memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
@@ -255,6 +261,10 @@ void spawnLaunch(){
 	toUserMode();
 	/* Call the function passed to fork1, and capture its return value */
 	result = ProcTableThree[getpid()%MAXPROC].func(ProcTableThree[getpid()%MAXPROC].arg);
+//    systemArgs sysArg;
+//    sysArg.number = SYS_TERMINATE;
+//    terminate(&sysArg);
+    Terminate(5);
 }
 
 void myWait(systemArgs *args){
@@ -301,6 +311,7 @@ void terminate(systemArgs *args){
         toUserMode();
         return;
     }
+    
     int currentpid = getpid();
     terminateReal(currentpid, currentpid);
     //toUserMode();
@@ -309,11 +320,18 @@ void terminate(systemArgs *args){
 void terminateReal(int initialpid, int pid){
     if (debugFlag){
         USLOSS_Console("terminateReal(): starting for pid: %d\n", pid);
+        int j;
+        USLOSS_Console("terminateReal(): children of pid: %d\n", pid);
+        for (j=0;j<MAXPROC;j++){
+            if(ProcTableThree[pid%MAXPROC].children[j] != INACTIVE){
+                USLOSS_Console("terminateReal(): %d\n", ProcTableThree[pid%MAXPROC].children[j]);
+            }
+        }
     }
     int i;
     for(i=0;i<MAXPROC;i++){
         if(ProcTableThree[pid%MAXPROC].children[i] == INACTIVE){
-            break;
+            continue;
         }
         else{
             terminateReal(initialpid, ProcTableThree[pid%MAXPROC].children[i]);
@@ -324,10 +342,23 @@ void terminateReal(int initialpid, int pid){
             ProcTableThree[pid%MAXPROC].children[i] = INACTIVE;
         }
     }
+    if (debugFlag){
+        USLOSS_Console("terminateReal(): outside of for loop for pid: %d\n", pid);
+    }
     /* Remove process from ProcessTable after it quits */
     ProcTableThree[pid%MAXPROC].status = INACTIVE;
     
     if(initialpid == pid){
+        if (debugFlag){
+            USLOSS_Console("terminateReal(): quitting pid: %d\n", initialpid);
+        }
+        int i;
+        int parentPid = ProcTableThree[pid % MAXPROC].parentPid;
+        for(i=0;i<MAXPROC;i++){
+            if (ProcTableThree[parentPid % MAXPROC].children[i] == pid){
+                ProcTableThree[parentPid % MAXPROC].children[i] = INACTIVE;
+            }
+        }
         quit(initialpid);
     }
     
