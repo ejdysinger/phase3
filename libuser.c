@@ -90,7 +90,6 @@ int Wait(int *pid, int *status)
 void Terminate(int status)
 {
     systemArgs sysArg;
-    
     CHECKMODE;
     sysArg.number = SYS_TERMINATE;
     sysArg.arg1 = (void *) ( (long) status);

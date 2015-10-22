@@ -24,7 +24,7 @@ void semAddMe(struct semaphore * target, int PID);
 int semRemoveMe(struct semaphore * target);
 void semCreate(systemArgs *args);
 void semP(systemArgs *args);
-void terminateReal(int currentpid);
+void terminateReal(int initialipid, int currentpid);
 int semCreateReal(int value);
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority);
 int waitReal(int * status);
@@ -255,7 +255,6 @@ void spawnLaunch(){
 	toUserMode();
 	/* Call the function passed to fork1, and capture its return value */
 	result = ProcTableThree[getpid()%MAXPROC].func(ProcTableThree[getpid()%MAXPROC].arg);
-    terminate(NULL);
 }
 
 void myWait(systemArgs *args){
@@ -272,8 +271,8 @@ void myWait(systemArgs *args){
     int pid;
     int status;
     pid = waitReal(&status);
-    args->arg1 = &pid;
-    args->arg2 = &status;
+    args->arg1 = pid;
+    args->arg2 = status;
     args->arg4 = pid==-1 ? &pid : 0;
     toUserMode();
 }
@@ -292,6 +291,9 @@ int waitReal(int * status){
 }
 
 void terminate(systemArgs *args){
+    if (debugFlag){
+        USLOSS_Console("terminate(): starting\n");
+    }
     if(args->number != SYS_TERMINATE){
         if (debugFlag){
             USLOSS_Console("terminate(): Attempted to terminate a process with wrong sys call number: %d.\n", args->number);
@@ -300,13 +302,13 @@ void terminate(systemArgs *args){
         return;
     }
     int currentpid = getpid();
-    terminateReal(currentpid);
-    toUserMode();
+    terminateReal(currentpid, currentpid);
+    //toUserMode();
 }
 
-void terminateReal(int pid){
+void terminateReal(int initialpid, int pid){
     if (debugFlag){
-        USLOSS_Console("terminateReal(): starting..\n");
+        USLOSS_Console("terminateReal(): starting for pid: %d\n", pid);
     }
     int i;
     for(i=0;i<MAXPROC;i++){
@@ -314,7 +316,10 @@ void terminateReal(int pid){
             break;
         }
         else{
-            terminateReal(ProcTableThree[pid%MAXPROC].children[i]);
+            terminateReal(initialpid, ProcTableThree[pid%MAXPROC].children[i]);
+            if (debugFlag){
+                USLOSS_Console("terminateReal(): zapping pid: %d\n", ProcTableThree[pid%MAXPROC].children[i]);
+            }
             zap(ProcTableThree[pid%MAXPROC].children[i]);
             ProcTableThree[pid%MAXPROC].children[i] = INACTIVE;
         }
@@ -322,6 +327,9 @@ void terminateReal(int pid){
     /* Remove process from ProcessTable after it quits */
     ProcTableThree[pid%MAXPROC].status = INACTIVE;
     
+    if(initialpid == pid){
+        quit(initialpid);
+    }
     
     /* If the process last zapped was Start3 then halt b/c all user processes are done. */
     if(strcmp(ProcTableThree[pid%MAXPROC].name, "start3")==0){
@@ -436,7 +444,7 @@ void semPReal(int index){
 		if(target->status == INACTIVE){
 			MboxCondReceive(target->seMboxID, msg, 0);
 			MboxCondReceive(target->mutexBox, msg, 0);
-			terminateReal(getpid());
+			terminateReal(getpid(), getpid());
 			break;
 		}
 		/* if the semaphore value can be decremented, do so */
@@ -611,7 +619,7 @@ void getPID(systemArgs *args)
 void nullSys3(systemArgs *args)
 {
 	USLOSS_Console("nullSys3(): Invalid System call: %d;\n Terminating process/n", args->number);
-	terminateReal(getpid());
+	terminateReal(getpid(), getpid());
 }
 
 /* adds a process to the list of processes blocked on a particular sempahore
