@@ -66,6 +66,7 @@ int start2(char *arg){
     
     for(iter = 0; iter < MAXPROC ; iter++){
         ProcTableThree[iter].status = INACTIVE;
+        ProcTableThree[iter].procMbox=-1;
     }
 
     /* place appropriate system call handlers in appropriate slots */
@@ -159,7 +160,7 @@ void spawn(systemArgs *args){
     int result;
     result = spawnReal(args->arg5, args->arg1, args->arg2, (int)args->arg3,(int)args->arg4);
     
-    args->arg1 = &result;
+    args->arg1 = result;
     args->arg4 = (void *)0;
     
     toUserMode();
@@ -192,9 +193,22 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     //strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
     ProcTableThree[kidpid % MAXPROC].pid = kidpid;
     memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
+    if(ProcTableThree[kidpid%MAXPROC].procMbox == -1){
+        int mboxID;
+        mboxID = MboxCreate(0, 50);
+        if (mboxID<0){
+            if (debugFlag){
+                USLOSS_Console(("spawnReal(): Mailbox was unable to be created.\n"));
+            }
+        }
+        ProcTableThree[kidpid%MAXPROC].procMbox = mboxID;
+    }
     MboxSend(ProcTableThree[kidpid%MAXPROC].procMbox, msg, 0);
     if (debugFlag){
         USLOSS_Console("spawnReal(): After mboxsend.\n");
+    }
+    if (debugFlag){
+        USLOSS_Console("spawnReal(): kidpid: %d.\n", kidpid);
     }
     return kidpid;
     
@@ -212,8 +226,16 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
    ----------------------------------------------------------------------- */
 void spawnLaunch(){
     
-    int procBoxID = MboxCreate(0, 50);
-    ProcTableThree[getpid()%MAXPROC].procMbox = procBoxID;
+    if(ProcTableThree[getpid()%MAXPROC].procMbox == -1){
+        int mboxID;
+        mboxID = MboxCreate(0, 50);
+        if (mboxID<0){
+            if (debugFlag){
+                USLOSS_Console(("spawnReal(): Mailbox was unable to be created.\n"));
+            }
+        }
+        ProcTableThree[getpid()%MAXPROC].procMbox = mboxID;
+    }
     if(debugFlag){
         USLOSS_Console("spawnLaunch(): Starting. \n");
     }
@@ -282,6 +304,9 @@ void terminate(systemArgs *args){
 }
 
 void terminateReal(int pid){
+    if (debugFlag){
+        USLOSS_Console("terminateReal(): starting..\n");
+    }
     int i;
     for(i=0;i<MAXPROC;i++){
         if(ProcTableThree[pid%MAXPROC].children[i] == INACTIVE){
