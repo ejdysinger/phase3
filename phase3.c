@@ -171,9 +171,7 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
         USLOSS_Console("spawnReal(): Starting spawnReal. \n");
     }
     int kidpid;
-    char * msg = "hi";
-    int procBoxID = MboxCreate(0, 50);
-    ProcTableThree[getpid()%MAXPROC].procMbox = procBoxID;
+    char * msg = NULL;
     kidpid = fork1(name, spawnLaunch, arg, stacksize, priority);
     if(debugFlag){
         USLOSS_Console("spawnReal(): After fork1. \n");
@@ -190,17 +188,11 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
     strcpy(ProcTableThree[kidpid%MAXPROC].name, name);
     ProcTableThree[kidpid%MAXPROC].status = ACTIVE;
     ProcTableThree[kidpid % MAXPROC].func = func;
-
     ProcTableThree[kidpid % MAXPROC].arg = arg;
     //strcpy(ProcTableThree[kidpid % MAXPROC].arg, arg);
-
     ProcTableThree[kidpid % MAXPROC].pid = kidpid;
-
     memset(ProcTableThree[kidpid%MAXPROC].children, INACTIVE, MAXPROC*sizeof(ProcTableThree[kidpid%MAXPROC].children[0]));
-    if(debugFlag){
-        USLOSS_Console("spawnReal(): Before mboxsend. \n");
-    }
-    MboxSend(procBoxID, msg, 0);
+    MboxSend(ProcTableThree[kidpid%MAXPROC].procMbox, msg, 0);
     if (debugFlag){
         USLOSS_Console("spawnReal(): After mboxsend.\n");
     }
@@ -219,14 +211,16 @@ int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int pri
    Side Effects - none
    ----------------------------------------------------------------------- */
 void spawnLaunch(){
-
+    
+    int procBoxID = MboxCreate(0, 50);
+    ProcTableThree[getpid()%MAXPROC].procMbox = procBoxID;
     if(debugFlag){
         USLOSS_Console("spawnLaunch(): Starting. \n");
     }
 	int result;
     char * msg = NULL;
-    if (debugFlag){
-        USLOSS_Console("spawnLaunch(): started function: %s\n", ProcTableThree[getpid()%MAXPROC].name);
+    if(debugFlag){
+        USLOSS_Console("spawnLaunch(): mboxreceive from box id: %d. \n", ProcTableThree[getpid()%MAXPROC].procMbox);
     }
 	MboxReceive(ProcTableThree[getpid()%MAXPROC].procMbox, msg, 0);
     //MboxRelease(ProcTableThree[getpid()%MAXPROC].procMbox);
