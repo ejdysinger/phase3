@@ -258,9 +258,14 @@ void spawnLaunch(){
         USLOSS_Console("spawnLaunch(): started function: %s\n", ProcTableThree[getpid()%MAXPROC].name);
     }
 	/* switch to user mode */
-	toUserMode();
+	int launchPID = getpid();
+    toUserMode();
+	if (debugFlag){
+		USLOSS_Console("spawnLaunch(): yO dawg, we here.\n");
+	}
 	/* Call the function passed to fork1, and capture its return value */
-	result = ProcTableThree[getpid()%MAXPROC].func(ProcTableThree[getpid()%MAXPROC].arg);
+	result = ProcTableThree[launchPID%MAXPROC].func(ProcTableThree[launchPID%MAXPROC].arg);
+
 //    systemArgs sysArg;
 //    sysArg.number = SYS_TERMINATE;
 //    terminate(&sysArg);
@@ -301,7 +306,10 @@ int waitReal(int * status){
 }
 
 void terminate(systemArgs *args){
-    if (debugFlag){
+	if (debugFlag){
+		USLOSS_Console("terminate(): yO dawg, we here.\n");
+	}
+	if (debugFlag){
         USLOSS_Console("terminate(): starting\n");
     }
     if(args->number != SYS_TERMINATE){
