@@ -22,7 +22,7 @@ void myWait(systemArgs *args);
 void terminate(systemArgs *args);
 void semCreate(systemArgs *args);
 void semP(systemArgs *args);
-void terminateReal(int initialipid, int currentpid);
+void terminateReal(int initialipid, int currentpid, int returnStatus);
 int semCreateReal(int value);
 int spawnReal(char *name, int (*func)(char *), char *arg, int stacksize, int priority);
 int waitReal(int * status);
@@ -38,7 +38,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 0;
+int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
 
 
@@ -284,7 +284,7 @@ void myWait(systemArgs *args){
     //USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
     args->arg1 = pid;
     args->arg2 = status;
-    args->arg4 = pid==-1 ? &pid : 0;
+    args->arg4 = pid==-1 ? pid : 0;
     toUserMode();
     //USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
 }
@@ -299,8 +299,11 @@ int waitReal(int * status){
 //    if(debugFlag){
 //		USLOSS_Console("waitReal(): executing join on process: %d.\n", *status);
 //	}
-    pid = join(status);
-    //USLOSS_Console("waitReal: pid: %d, status %d\n", pid, *status);
+    int fake;
+    pid = join(&fake);
+    //USLOSS_Console("waitReal(): pid returned from join %d\n", pid);
+    *status = ProcTableThree[pid%MAXPROC].returnStatus;
+    //USLOSS_Console("waitReal: pid: %d, status %d\n", pid, ProcTableThree[pid%MAXPROC].returnStatus);
     if(pid == -2){
         pid = -1;
     }
@@ -320,11 +323,15 @@ void terminate(systemArgs *args){
     }
     
     int currentpid = getpid();
-    terminateReal(currentpid, currentpid);
+    terminateReal(currentpid, currentpid, args->arg1);
+//    ProcTableThree[currentpid%MAXPROC].returnStatus = (long)args->arg1;
+//    if(debugFlag){
+//        USLOSS_Console("terminate(): Return status is: %d\n", args->arg1);
+//    }
     //toUserMode();
 }
 
-void terminateReal(int initialpid, int pid){
+void terminateReal(int initialpid, int pid, int returnStatus){
     if (debugFlag){
         USLOSS_Console("terminateReal(): starting for pid: %d\n", pid);
         int j;
@@ -341,7 +348,7 @@ void terminateReal(int initialpid, int pid){
             continue;
         }
         else{
-            terminateReal(initialpid, ProcTableThree[pid%MAXPROC].children[i]);
+            terminateReal(initialpid, ProcTableThree[pid%MAXPROC].children[i], returnStatus);
             if (debugFlag){
                 USLOSS_Console("terminateReal(): zapping pid: %d\n", ProcTableThree[pid%MAXPROC].children[i]);
             }
@@ -366,6 +373,7 @@ void terminateReal(int initialpid, int pid){
                 ProcTableThree[parentPid % MAXPROC].children[i] = INACTIVE;
             }
         }
+        ProcTableThree[initialpid%MAXPROC].returnStatus = returnStatus;
         quit(initialpid);
     }
     
@@ -490,14 +498,14 @@ void semPReal(int index){
 
 	/* if the semaphore has been cleared since the process blocked, terminate */
 	if(target->status == INACTIVE)
-		terminateReal(getpid(), getpid());
+		terminateReal(getpid(), getpid(), 1);
 	/* test if the semaphore can be incremented, block otherwise */
+    target->blockedProc++;
 	if(target->value <= 0){
-		target->blockedProc++;
 		MboxReceive(target->seMboxID, msg, 0);
 		/* if the semaphore has been cleared since the process blocked, terminate */
 		if(target->status == INACTIVE)
-			terminateReal(getpid(), getpid());
+			terminateReal(getpid(), getpid(), 1);
 	}
 	/* enter mutex */
 	MboxSend(target->mutexBox, msg, 0);
@@ -512,7 +520,9 @@ void semPReal(int index){
 	if (debugFlag){
 		USLOSS_Console("semPReal(): Exiting Mutex.\n");
 	}
-	MboxCondSend(target->seMboxID, msg, 0);
+    if(target->value > 0){
+        MboxCondSend(target->seMboxID, msg, 0);
+    }
 	/* exit both semaphore and mutex mbox */
 	MboxCondReceive(target->mutexBox, msg, 0);
 }
@@ -534,7 +544,7 @@ void semV(systemArgs *args){
 	}
 	/* retrieves the semaphore location from the args struct */
 	int semNum;
-	int semTarg = ((int *)args->arg1);
+	int semTarg = ((int )args->arg1);
 	if (debugFlag)
 		USLOSS_Console("semV(): Received semaphore number: %d.\n", semTarg);
 	semNum = semVReal(semTarg);
@@ -683,7 +693,7 @@ void getPID(systemArgs *args)
 void nullSys3(systemArgs *args)
 {
 	USLOSS_Console("nullSys3(): Invalid System call: %d;\n Terminating process/n", args->number);
-	terminateReal(getpid(), getpid());
+	terminateReal(getpid(), getpid(), 1);
 }
 
 /* adds a process to the list of processes blocked on a particular sempahore

@@ -27,6 +27,7 @@ struct ProcStruct {
     int procMbox;
     int (*func)(char *);
     char *arg;
+    long returnStatus;
 //    procPtr         nextProcPtr;
 //    procPtr         childProcPtr;
 //    procPtr         nextSiblingPtr;
