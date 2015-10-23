@@ -1,11 +1,9 @@
-<<<<<<< HEAD
 /libpatrickphase1.a
 /libpatrickphase2.a
 /libpatrickphase1debug.a
 /libpatrickphase2debug.a
 usloss
 
-=======
 
 libpatrickphase2debug.a
 
@@ -24,7 +22,6 @@ term1.out
 term2.out
 
 term3.out
-<<<<<<< HEAD
 
 libpatrickphase1.a
 
@@ -45,9 +42,6 @@ test10
 test17.o
 
 usloss
-=======
->>>>>>> 3105cd92793eeea52f7974893cf8e4becfacccff
->>>>>>> origin/master
 
 libuser.c
 
@@ -64,3 +58,5 @@ MacOSXlibs/libpatrickphase2debug.a
 phase3.o
 
 sems.h
+
+output/*
