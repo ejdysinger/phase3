@@ -38,7 +38,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 1;
+int debugFlag = 0;
 /* ------------------------------------------------------------------------ */
 
 
@@ -493,6 +493,9 @@ void semPReal(int index){
 	if(target->value <= 0){
 		target->blockedProc++;
 		MboxReceive(target->seMboxID, msg, 0);
+		/* if the semaphore has been cleared since the process blocked, terminate */
+		if(target->status == INACTIVE)
+			terminateReal(getpid(), getpid());
 	}
 	/* enter mutex */
 	MboxSend(target->mutexBox, msg, 0);
