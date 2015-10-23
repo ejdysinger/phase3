@@ -258,9 +258,6 @@ void spawnLaunch(){
 	/* switch to user mode */
 	int launchPID = getpid();
     toUserMode();
-	if (debugFlag){
-		USLOSS_Console("spawnLaunch(): yO dawg, we here.\n");
-	}
 	/* Call the function passed to fork1, and capture its return value */
 	result = ProcTableThree[launchPID%MAXPROC].func(ProcTableThree[launchPID%MAXPROC].arg);
 
@@ -296,6 +293,11 @@ int waitReal(int * status){
     }
     int pid;
     ProcTableThree[getpid()%MAXPROC].status = WAIT_BLOCKED;
+
+    if(debugFlag){
+		USLOSS_Console("waitReal(): executing join on process: %d.\n", *status);
+	}
+
     pid = join(status);
     if(pid == -2){
         pid = -1;
@@ -304,9 +306,6 @@ int waitReal(int * status){
 }
 
 void terminate(systemArgs *args){
-	if (debugFlag){
-		USLOSS_Console("terminate(): yO dawg, we here.\n");
-	}
 	if (debugFlag){
         USLOSS_Console("terminate(): starting\n");
     }
