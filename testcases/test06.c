@@ -22,6 +22,7 @@ int start3(char *arg)
 
    printf("start3(): started.  Creating semaphore.\n");
    sem_result = SemCreate(0, &semaphore);
+   printf("JASON: semaphore value: %d\n",semaphore);
    if (sem_result != 0) {
       printf("start3(): got non-zero semaphore result. Terminating...\n");
       Terminate(1);
@@ -32,7 +33,9 @@ int start3(char *arg)
    printf("start3(): calling Spawn for Child2\n");
    Spawn("Child2", Child2, NULL, USLOSS_MIN_STACK, 2, &pid);
    printf("start3(): after spawn of %d\n", pid);
+   printf("start3(): Waiting on child %d\n", pid);
    Wait(&pid, &status);
+   printf("start3(): Waiting on child %d\n", pid);
    Wait(&pid, &status);
    printf("start3(): Parent done. Calling Terminate.\n");
    Terminate(8);

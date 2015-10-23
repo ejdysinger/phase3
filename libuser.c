@@ -37,7 +37,6 @@ int Spawn(char *name, int (*func)(char *), char *arg, int stack_size,
 	int priority, int *pid)   
 {
     systemArgs sysArg;
-    
     CHECKMODE;
     sysArg.number = SYS_SPAWN;
     sysArg.arg1 = (void *) func;

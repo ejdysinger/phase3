@@ -38,7 +38,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 0;
+int debugFlag = 1;
 /* ------------------------------------------------------------------------ */
 
 
@@ -386,7 +386,7 @@ void semCreate(systemArgs *args){
         return;
     }
     
-    if(semsUsed>MAXSEMS || args->arg1 < 0){
+    if(semsUsed>=MAXSEMS || args->arg1 < 0){
         args->arg4 = (void *)-1;
         return;
     }
@@ -398,10 +398,13 @@ void semCreate(systemArgs *args){
 }
 
 int semCreateReal(int value){
+    if(debugFlag){
+        USLOSS_Console("semCreateReal(): starting\n");
+    }
     struct semaphore newSem;
     // create mboxes for P operation mutex and for semaphore manipulation
-    int mboxId = MboxCreate(0, 50);
-    int mutexBoxId = MboxCreate(0, 50);
+    int mboxId = MboxCreate(1, 50);
+    int mutexBoxId = MboxCreate(1, 50);
     newSem.seMboxID = mboxId;
     newSem.mutexBox = mutexBoxId;
     newSem.status=ACTIVE;
@@ -445,6 +448,9 @@ void semP(systemArgs *args){
         return;
     }
     semPReal(index);
+    if (debugFlag){
+		USLOSS_Console("semP(): Returned from P operation.\n");
+	}
     args->arg4=0;
     toUserMode();
 }
@@ -474,35 +480,35 @@ void semP(systemArgs *args){
 } */
 
 void semPReal(int index){
+	if (debugFlag){
+		USLOSS_Console("semPReal(): started.\n");
+	}
 	struct semaphore * target = &SemTable[index % MAX_SEMS];
 	char * msg = "hi";
-	while(1){
-		/* enter mutex */
+
+	/* if the semaphore has been cleared since the process blocked, terminate */
+	if(target->status == INACTIVE)
+		terminateReal(getpid(), getpid());
+	/* test if the semaphore can be incremented, block otherwise */
+	if(target->value <= 0){
 		target->blockedProc++;
-		MboxSend(target->mutexBox, msg, 0);
-		/* if the semaphore has been cleared since the process blocked, terminate */
-		/* enter the semaphore mbox */
-		MboxSend(target->seMboxID, msg, 0);
-		/* if the semaphore has been cleared since the process blocked, terminate */
-		if(target->status == INACTIVE){
-			MboxCondReceive(target->seMboxID, msg, 0);
-			MboxCondReceive(target->mutexBox, msg, 0);
-			terminateReal(getpid(), getpid());
-			break;
-		}
-		/* if the semaphore value can be decremented, do so */
-		if(target->value > 0){
-			target->value--;
-			break;
-		}
-		/* otherwise exit the semaphore and mutex mboxes */
-		target->blockedProc--;
-		MboxCondReceive(target->seMboxID, msg, 0);
-		MboxCondReceive(target->mutexBox, msg, 0);
+		MboxReceive(target->seMboxID, msg, 0);
 	}
-	/* exit both semaphore and mutex mbox */
+	/* enter mutex */
+	MboxSend(target->mutexBox, msg, 0);
 	target->blockedProc--;
-	MboxCondReceive(target->seMboxID, msg, 0);
+	if (debugFlag){
+		USLOSS_Console("semPReal(): In Mutex.\n");
+	}
+	/* decrement the semaphore value */
+	target->value--;
+
+	/* exit the mutex mbox */
+	if (debugFlag){
+		USLOSS_Console("semPReal(): Exiting Mutex.\n");
+	}
+	MboxCondSend(target->seMboxID, msg, 0);
+	/* exit both semaphore and mutex mbox */
 	MboxCondReceive(target->mutexBox, msg, 0);
 }
 
@@ -542,19 +548,17 @@ int semVReal(int semNum)
 	/* enter mutex */
 	target->blockedProc++;
 	MboxSend(target->mutexBox, msg, 0);
-	MboxSend(target->seMboxID, msg, 0);
 	/* check if valid semaphore */
 	if(target->status == INACTIVE){
-		MboxCondReceive(target->seMboxID, msg, 0);
 		MboxCondReceive(target->mutexBox, msg, 0);
 		return -1;
 	}
-	/* increment if possible */
-	if(target->value < target->maxValue)
-		target->value++;
+	/* increment the semaphore value */
+	target->value++;
+	/* execute a conditional receive on the semaphore inbox */
+	MboxCondSend(target->seMboxID, msg, 0);
 	target->blockedProc--;
 	/* exit mutex */
-	MboxCondReceive(target->seMboxID, msg, 0);
 	MboxCondReceive(target->mutexBox, msg, 0);
 	/* return 0 to indicate success */
 	return 0;
@@ -580,17 +584,20 @@ void semFree(systemArgs *args)
 	}
 	int semNum = semFreeReal((int *)args->arg1);
 	/* place return value into arg4 */
-	args->arg4 = &semNum;
-	toUserMode();
+	args->arg4 = semNum;
+	//toUserMode();
 }
 
 int semFreeReal(int * semNum)
 {
-	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
+    if(debugFlag){
+        USLOSS_Console("semFreeReal: starting\n");
+    }
+	struct semaphore * target = &SemTable[(int)semNum % MAX_SEMS];
 	int reply;
 	char * msg = "hi";
 	MboxSend(target->mutexBox, msg, 0);
-	MboxSend(target->seMboxID, msg, 0);
+	//MboxSend(target->seMboxID, msg, 0);
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
@@ -612,6 +619,10 @@ int semFreeReal(int * semNum)
 	MboxRelease(target->seMboxID);
 	MboxRelease(target->mutexBox);
 	/* return the status */
+    if(debugFlag){
+        USLOSS_Console("semFreeReal: ending\n");
+    }
+    semsUsed--;
 	return reply;
 }
 
@@ -625,7 +636,7 @@ int semFreeReal(int * semNum)
 void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
-	args->arg4 = readtime();
+	args->arg4 = USLOSS_Clock()/(1000000);
 	toUserMode();
 
 }

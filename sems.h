@@ -6,7 +6,6 @@ typedef struct semaphore
 	int maxValue;
 	int value;
 	int status;
-	int waitList[MAXPROC];
 	int head;
 	int tail;
 	int blockedProc;
