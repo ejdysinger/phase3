@@ -43,8 +43,6 @@ test17.o
 
 usloss
 
-libuser.c
-
 MacOSXlibs/libpatrickphase1.a
 
 *.a

@@ -35,6 +35,5 @@ int Child1(char *arg)
    printf("Child1(): done\n");
    Terminate(9);
 
-    printf("Child1(): after terminate.\n");
    return 0;
 } /* Child1 */
