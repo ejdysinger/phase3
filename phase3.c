@@ -281,12 +281,12 @@ void myWait(systemArgs *args){
     int pid;
     int status;
     pid = waitReal(&status);
-    USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
+    //USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
     args->arg1 = pid;
     args->arg2 = status;
     args->arg4 = pid==-1 ? &pid : 0;
     toUserMode();
-    USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
+    //USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
 }
 
 int waitReal(int * status){
@@ -300,7 +300,7 @@ int waitReal(int * status){
 //		USLOSS_Console("waitReal(): executing join on process: %d.\n", *status);
 //	}
     pid = join(status);
-    USLOSS_Console("waitReal: pid: %d, status %d\n", pid, status);
+    //USLOSS_Console("waitReal: pid: %d, status %d\n", pid, *status);
     if(pid == -2){
         pid = -1;
     }
@@ -450,6 +450,9 @@ void semP(systemArgs *args){
         return;
     }
     semPReal(index);
+    if (debugFlag){
+		USLOSS_Console("semP(): Returned from P operation.\n");
+	}
     args->arg4=0;
     toUserMode();
 }
@@ -479,35 +482,35 @@ void semP(systemArgs *args){
 } */
 
 void semPReal(int index){
+	if (debugFlag){
+		USLOSS_Console("semPReal(): started.\n");
+	}
 	struct semaphore * target = &SemTable[index % MAX_SEMS];
 	char * msg = "hi";
-	while(1){
-		/* enter mutex */
+
+	/* if the semaphore has been cleared since the process blocked, terminate */
+	if(target->status == INACTIVE)
+		terminateReal(getpid(), getpid());
+	/* test if the semaphore can be incremented, block otherwise */
+	if(target->value <= 0){
 		target->blockedProc++;
-		MboxSend(target->mutexBox, msg, 0);
-		/* if the semaphore has been cleared since the process blocked, terminate */
-		/* enter the semaphore mbox */
-		MboxSend(target->seMboxID, msg, 0);
-		/* if the semaphore has been cleared since the process blocked, terminate */
-		if(target->status == INACTIVE){
-			MboxCondReceive(target->seMboxID, msg, 0);
-			MboxCondReceive(target->mutexBox, msg, 0);
-			terminateReal(getpid(), getpid());
-			break;
-		}
-		/* if the semaphore value can be decremented, do so */
-		if(target->value > 0){
-			target->value--;
-			break;
-		}
-		/* otherwise exit the semaphore and mutex mboxes */
-		target->blockedProc--;
-		MboxCondReceive(target->seMboxID, msg, 0);
-		MboxCondReceive(target->mutexBox, msg, 0);
+		MboxReceive(target->seMboxID, msg, 0);
 	}
-	/* exit both semaphore and mutex mbox */
+	/* enter mutex */
+	MboxSend(target->mutexBox, msg, 0);
 	target->blockedProc--;
-	MboxCondReceive(target->seMboxID, msg, 0);
+	if (debugFlag){
+		USLOSS_Console("semPReal(): In Mutex.\n");
+	}
+	/* decrement the semaphore value */
+	target->value--;
+
+	/* exit the mutex mbox */
+	if (debugFlag){
+		USLOSS_Console("semPReal(): Exiting Mutex.\n");
+	}
+	MboxCondSend(target->seMboxID, msg, 0);
+	/* exit both semaphore and mutex mbox */
 	MboxCondReceive(target->mutexBox, msg, 0);
 }
 
@@ -547,19 +550,17 @@ int semVReal(int semNum)
 	/* enter mutex */
 	target->blockedProc++;
 	MboxSend(target->mutexBox, msg, 0);
-	MboxSend(target->seMboxID, msg, 0);
 	/* check if valid semaphore */
 	if(target->status == INACTIVE){
-		MboxCondReceive(target->seMboxID, msg, 0);
 		MboxCondReceive(target->mutexBox, msg, 0);
 		return -1;
 	}
-	/* increment if possible */
-	if(target->value < target->maxValue)
-		target->value++;
+	/* increment the semaphore value */
+	target->value++;
+	/* execute a conditional receive on the semaphore inbox */
+	MboxCondSend(target->seMboxID, msg, 0);
 	target->blockedProc--;
 	/* exit mutex */
-	MboxCondReceive(target->seMboxID, msg, 0);
 	MboxCondReceive(target->mutexBox, msg, 0);
 	/* return 0 to indicate success */
 	return 0;
