@@ -10,7 +10,7 @@
 /* -------------------------- Prototypes ------------------------------------- */
 extern int start3(char *arg);
 void semV(systemArgs *args);
-int semVReal(int * semNum);
+int semVReal(int semNum);
 void semFree(systemArgs *args);
 int semFreeReal(int * semNum);
 void getTimeOfDay(systemArgs *args);
@@ -20,8 +20,6 @@ void nullSys3(systemArgs *args);
 void spawn(systemArgs *args);
 void myWait(systemArgs *args);
 void terminate(systemArgs *args);
-void semAddMe(struct semaphore * target, int PID);
-int semRemoveMe(struct semaphore * target);
 void semCreate(systemArgs *args);
 void semP(systemArgs *args);
 void terminateReal(int initialipid, int currentpid);
@@ -395,7 +393,7 @@ void semCreate(systemArgs *args){
     }
     int index;
     index = semCreateReal((int)args->arg1);
-    args->arg1 = &index;
+    args->arg1 = index;
     args->arg4 = 0;
     toUserMode();
 }
@@ -412,6 +410,7 @@ int semCreateReal(int value){
     newSem.tail = -1;
     newSem.blockedProc = 0;
     newSem.value = value;
+    newSem.maxValue = value;
     int i;
     for(i=0;i<MAXSEMS;i++){
         if(SemTable[i].status == INACTIVE){
@@ -424,15 +423,21 @@ int semCreateReal(int value){
 }
 
 void semP(systemArgs *args){
-    if(args->number != SYS_SEMP){
+	if (debugFlag){
+		USLOSS_Console("semP(): started.\n");
+	}
+	if(args->number != SYS_SEMP){
         if (debugFlag){
             USLOSS_Console("semP(): Attempted to semP with wrong sys call number: %d.\n", args->number);
         }
         toUserMode();
         return;
     }
-    int index;
-    index = (int)args->arg1;
+    long index;
+    index = ((long)args->arg1);
+    if (debugFlag){
+		USLOSS_Console("semP(): Retrieved semaphore number: %d.\n", index);
+	}
     if(index > MAXSEMS-1 || SemTable[index].status == INACTIVE){
         if(debugFlag){
             USLOSS_Console("semP(): Semaphore inactive or index out of bounds at index: %d.\n", index);
@@ -519,16 +524,21 @@ void semV(systemArgs *args){
 	}
 	/* retrieves the semaphore location from the args struct */
 	int semNum;
-	semNum = semVReal((int *)args->arg1);
+	int semTarg = ((int *)args->arg1);
+	if (debugFlag)
+		USLOSS_Console("semV(): Received semaphore number: %d.\n", semTarg);
+	semNum = semVReal(semTarg);
 	/* if the semaphore handle is invalid return -1 */
 	args->arg4 =  &semNum;
 	toUserMode();
 }
 
 /* helper function for semV */
-int semVReal(int * semNum)
+int semVReal(int semNum)
 {
-	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
+	if (debugFlag)
+			USLOSS_Console("semV(): Started on semapohore number: %d.\n", semNum);
+	struct semaphore * target = &SemTable[semNum % MAX_SEMS];
 	char * msg = "hi";
 	/* enter mutex */
 	target->blockedProc++;
