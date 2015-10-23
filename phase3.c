@@ -38,7 +38,7 @@ int semsUsed;
 
 void (*systemCallVec[MAXSYSCALLS])(systemArgs *args);
 
-int debugFlag = 1;
+int debugFlag = 0;
 /* ------------------------------------------------------------------------ */
 
 
@@ -398,10 +398,13 @@ void semCreate(systemArgs *args){
 }
 
 int semCreateReal(int value){
+    if(debugFlag){
+        USLOSS_Console("semCreateReal(): starting\n");
+    }
     struct semaphore newSem;
     // create mboxes for P operation mutex and for semaphore manipulation
-    int mboxId = MboxCreate(0, 50);
-    int mutexBoxId = MboxCreate(0, 50);
+    int mboxId = MboxCreate(1, 50);
+    int mutexBoxId = MboxCreate(1, 50);
     newSem.seMboxID = mboxId;
     newSem.mutexBox = mutexBoxId;
     newSem.status=ACTIVE;
@@ -580,17 +583,20 @@ void semFree(systemArgs *args)
 	}
 	int semNum = semFreeReal((int *)args->arg1);
 	/* place return value into arg4 */
-	args->arg4 = &semNum;
-	toUserMode();
+	args->arg4 = semNum;
+	//toUserMode();
 }
 
 int semFreeReal(int * semNum)
 {
-	struct semaphore * target = &SemTable[*semNum % MAX_SEMS];
+    if(debugFlag){
+        USLOSS_Console("semFreeReal: starting\n");
+    }
+	struct semaphore * target = &SemTable[(int)semNum % MAX_SEMS];
 	int reply;
 	char * msg = "hi";
 	MboxSend(target->mutexBox, msg, 0);
-	MboxSend(target->seMboxID, msg, 0);
+	//MboxSend(target->seMboxID, msg, 0);
 	/* check if valid semaphore */
 	if(target->status == INACTIVE)
 		return -1;
@@ -612,6 +618,10 @@ int semFreeReal(int * semNum)
 	MboxRelease(target->seMboxID);
 	MboxRelease(target->mutexBox);
 	/* return the status */
+    if(debugFlag){
+        USLOSS_Console("semFreeReal: ending\n");
+    }
+    semsUsed--;
 	return reply;
 }
 
@@ -625,7 +635,7 @@ int semFreeReal(int * semNum)
 void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
-	args->arg4 = readtime();
+	args->arg4 = USLOSS_Clock()/(1000000);
 	toUserMode();
 
 }
