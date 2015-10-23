@@ -281,10 +281,12 @@ void myWait(systemArgs *args){
     int pid;
     int status;
     pid = waitReal(&status);
+    USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
     args->arg1 = pid;
     args->arg2 = status;
     args->arg4 = pid==-1 ? &pid : 0;
     toUserMode();
+    USLOSS_Console("myWait: pid: %d, status %d\n", pid, status);
 }
 
 int waitReal(int * status){
@@ -293,12 +295,12 @@ int waitReal(int * status){
     }
     int pid;
     ProcTableThree[getpid()%MAXPROC].status = WAIT_BLOCKED;
-
-    if(debugFlag){
-		USLOSS_Console("waitReal(): executing join on process: %d.\n", *status);
-	}
-
+//
+//    if(debugFlag){
+//		USLOSS_Console("waitReal(): executing join on process: %d.\n", *status);
+//	}
     pid = join(status);
+    USLOSS_Console("waitReal: pid: %d, status %d\n", pid, status);
     if(pid == -2){
         pid = -1;
     }
@@ -412,7 +414,7 @@ int semCreateReal(int value){
     newSem.tail = -1;
     newSem.blockedProc = 0;
     newSem.value = value;
-    newSem.maxValue = value;
+    //newSem.maxValue = value;
     int i;
     for(i=0;i<MAXSEMS;i++){
         if(SemTable[i].status == INACTIVE){
@@ -635,7 +637,7 @@ int semFreeReal(int * semNum)
 void getTimeOfDay(systemArgs *args)
 {
 	/* place time of day in args*[4] */
-	args->arg4 = USLOSS_Clock()/(1000000);
+	args->arg1 = USLOSS_Clock();
 	toUserMode();
 
 }
@@ -649,7 +651,7 @@ void getTimeOfDay(systemArgs *args)
    ----------------------------------------------------------------------- */
 void cpuTime(systemArgs *args)
 {
-	args->arg1 = readCurStartTime();
+	args->arg1 = USLOSS_Clock() - readCurStartTime();
 	toUserMode();
 }
 
